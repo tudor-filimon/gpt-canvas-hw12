@@ -8,7 +8,7 @@ import {
   ChevronDown, 
   ChevronUp,
   Plus,
-  Pencil,
+  // Pencil, // COMMENTED OUT - no longer editing titles
 } from 'lucide-react';
 
 const ChatMessage = ({ role, content }) => (
@@ -26,8 +26,9 @@ const ChatMessage = ({ role, content }) => (
 );
 
 // Helper for the side controls (Handle + Add Button)
-const SideControl = ({ position, isConnectable, onAddNode }) => {
+const SideControl = ({ position, isConnectable, onAddNode, isCollapsed }) => {
   // Invisible Hit Area - positioned to just cover the edge and extend outward
+  // When collapsed, the node is shorter, so hit areas adjust accordingly
   const hitAreaClasses = {
     [Position.Top]: '-top-4 left-0 w-full h-8',
     [Position.Right]: '-right-4 top-0 w-8 h-full',
@@ -78,7 +79,7 @@ const SideControl = ({ position, isConnectable, onAddNode }) => {
         position={position} 
         id={`source-${position}`} 
         isConnectable={isConnectable} 
-        className="!w-[13px] !h-[13px] !bg-neutral-400 !border-2 !border-white dark:!border-neutral-900 hover:!bg-blue-500 transition-colors opacity-0 group-hover/hit:opacity-100 transition-opacity duration-200" 
+        className="!w-[13px] !h-[13px] !bg-neutral-400 !border-2 !border-white dark:!border-neutral-900 hover:!bg-black dark:hover:!bg-white transition-colors opacity-0 group-hover/hit:opacity-100 transition-opacity duration-200" 
         style={getHandleStyle()}
       />
       
@@ -89,7 +90,7 @@ const SideControl = ({ position, isConnectable, onAddNode }) => {
             e.stopPropagation();
             onAddNode(position);
           }}
-          className="p-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-full text-neutral-500 hover:text-blue-500 hover:border-blue-500 shadow-sm transition-all transform hover:scale-110"
+          className="p-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-full text-neutral-500 hover:text-black dark:hover:text-white hover:border-black dark:hover:border-white shadow-sm transition-all transform hover:scale-110"
           title="Add Connected Node"
         >
           <Plus size={12} strokeWidth={3} />
@@ -119,12 +120,15 @@ export default function ChatNode({ data, id, isConnectable }) {
   const [isStarred, setIsStarred] = useState(data.isStarred || false);
   const isRoot = data.isRoot || false;
   
-  // Title editing state
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [title, setTitle] = useState(data.label || "New Node");
+  // Title editing state - COMMENTED OUT FOR NOW
+  // const [isEditingTitle, setIsEditingTitle] = useState(false);
+  // const [title, setTitle] = useState(data.label || "New Node");
+  
+  // Use node ID as the title (will be replaced with board ID from database)
+  const title = id; // For now, use node ID. Later: data.boardId or similar
   
   const textareaRef = useRef(null);
-  const titleInputRef = useRef(null);
+  // const titleInputRef = useRef(null); // COMMENTED OUT - no longer editing titles
   const resizeHandleRef = useRef(null);
   const nodeContainerRef = useRef(null);
   const { deleteElements, updateNode } = useReactFlow();
@@ -148,12 +152,12 @@ export default function ChatNode({ data, id, isConnectable }) {
     }
   }, [input]);
 
-  // Focus title input when editing starts
-  useEffect(() => {
-    if (isEditingTitle && titleInputRef.current) {
-      titleInputRef.current.focus();
-    }
-  }, [isEditingTitle]);
+  // Focus title input when editing starts - COMMENTED OUT
+  // useEffect(() => {
+  //   if (isEditingTitle && titleInputRef.current) {
+  //     titleInputRef.current.focus();
+  //   }
+  // }, [isEditingTitle]);
 
   const handleSend = useCallback(() => {
     if (!input.trim()) return;
@@ -162,7 +166,7 @@ export default function ChatNode({ data, id, isConnectable }) {
     setInput('');
     setHasSent(true);
     setTimeout(() => {
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'This is a mock AI response.' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.' }]);
     }, 1000);
   }, [input, messages]);
 
@@ -176,10 +180,10 @@ export default function ChatNode({ data, id, isConnectable }) {
     }
   }, [data, id]);
 
-  const handleTitleSubmit = () => {
-    setIsEditingTitle(false);
-    // Here you would typically notify parent to update node data
-  };
+  // const handleTitleSubmit = () => {
+  //   setIsEditingTitle(false);
+  //   // Here you would typically notify parent to update node data
+  // };
 
   // Resize handlers - supports both width and height
   const handleResizeStart = useCallback((e) => {
@@ -250,10 +254,10 @@ export default function ChatNode({ data, id, isConnectable }) {
       <UniversalHandle position={Position.Left} isConnectable={isConnectable} />
 
       {/* Side Controls */}
-      <SideControl position={Position.Top} isConnectable={isConnectable} onAddNode={handleAddNode} />
-      <SideControl position={Position.Right} isConnectable={isConnectable} onAddNode={handleAddNode} />
-      <SideControl position={Position.Bottom} isConnectable={isConnectable} onAddNode={handleAddNode} />
-      <SideControl position={Position.Left} isConnectable={isConnectable} onAddNode={handleAddNode} />
+      <SideControl position={Position.Top} isConnectable={isConnectable} onAddNode={handleAddNode} isCollapsed={isCollapsed} />
+      <SideControl position={Position.Right} isConnectable={isConnectable} onAddNode={handleAddNode} isCollapsed={isCollapsed} />
+      <SideControl position={Position.Bottom} isConnectable={isConnectable} onAddNode={handleAddNode} isCollapsed={isCollapsed} />
+      <SideControl position={Position.Left} isConnectable={isConnectable} onAddNode={handleAddNode} isCollapsed={isCollapsed} />
 
       {/* Delete Button - Only visible when hovering this specific corner area */}
       <div className="absolute -top-4 -right-4 w-12 h-12 z-50 flex items-center justify-center group/delete">
@@ -298,11 +302,12 @@ export default function ChatNode({ data, id, isConnectable }) {
       </div>
 
       {/* Header */}
-      <div className={`drag-handle px-5 py-4 flex items-center justify-between ${!isCollapsed ? 'border-b border-neutral-100 dark:border-neutral-800' : 'rounded-b-[2rem]'} cursor-grab active:cursor-grabbing`}>
-        <div className="flex items-center gap-2 group/title">
+      <div className={`drag-handle px-5 py-4 flex items-center justify-between ${isCollapsed ? 'rounded-b-[2rem]' : ''} cursor-grab active:cursor-grabbing`}>
+        <div className="flex items-center gap-2">
           <GripVertical size={16} className="text-neutral-400" />
           
-          {isEditingTitle ? (
+          {/* Title - Non-editable, using node ID (will be board ID from database) */}
+          {/* {isEditingTitle ? (
             <input
               ref={titleInputRef}
               value={title}
@@ -321,7 +326,12 @@ export default function ChatNode({ data, id, isConnectable }) {
               </span>
               <Pencil size={12} className="text-neutral-400 opacity-0 group-hover/title:opacity-100 transition-opacity" />
             </div>
-          )}
+          )} */}
+          <span 
+            className="text-neutral-500 dark:text-neutral-500 text-sm max-w-[150px] truncate select-none font-mono"
+          >
+            {title}
+          </span>
         </div>
         
         <div className="flex items-center gap-2">
@@ -358,7 +368,7 @@ export default function ChatNode({ data, id, isConnectable }) {
       {!isCollapsed && (
         <div className={`flex flex-col ${nodeHeight ? 'flex-1 min-h-0' : ''}`}>
           {(messages.length > 0) && (
-            <div className={`p-5 ${nodeHeight ? 'flex-1 overflow-y-auto min-h-0' : 'max-h-[400px] overflow-y-auto'} custom-scrollbar`}>
+            <div className={`p-5 ${nodeHeight ? 'flex-1 overflow-y-auto min-h-0' : ''} custom-scrollbar`}>
               {messages.map((msg, idx) => (
                 <ChatMessage key={idx} role={msg.role} content={msg.content} />
               ))}

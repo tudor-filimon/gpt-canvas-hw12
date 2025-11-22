@@ -3,7 +3,7 @@ import { Plus, Trash2, Maximize, Search, Sun, Moon } from 'lucide-react';
 
 export default function Hotbar({ onAddNode, onClear, onFitView, onSearch, onToggleTheme, colorMode }) {
   return (
-    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white dark:bg-neutral-800 rounded-full shadow-xl border border-neutral-200 dark:border-neutral-700 p-1.5 flex items-center gap-1 z-10 transition-colors duration-200">
+    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white dark:bg-neutral-800 rounded-xl shadow-xl border border-neutral-200 dark:border-neutral-700 p-1.5 flex items-center gap-1 z-10 transition-colors duration-200">
       <button
         onClick={onAddNode}
         className="p-2 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-full transition-colors"

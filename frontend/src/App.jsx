@@ -15,6 +15,7 @@ import '@xyflow/react/dist/style.css';
 import ChatNode from './components/ChatNode.jsx';
 import Layout from './components/Layout.jsx';
 import Hotbar from './components/Hotbar.jsx';
+import SearchModal from './components/SearchModal.jsx';
 
 const nodeTypes = { chat: ChatNode };
 
@@ -22,9 +23,10 @@ function Flow() {
   // Define handlers first so we can pass them to initial state if needed, 
   // but typically we inject them via effects or map over state.
   
-  const { fitView, getNode, getViewport } = useReactFlow();
+  const { fitView, getNode, getViewport, setCenter } = useReactFlow();
   const [edges, setEdges] = useState([]);
   const [colorMode, setColorMode] = useState('dark');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // Node dimensions (approximate)
   const NODE_WIDTH = 400;
@@ -98,6 +100,160 @@ function Flow() {
     const maxY = Math.max(...allNodes.map(n => n.position.y)) + NODE_HEIGHT + PADDING;
     return { x: maxX, y: maxY };
   }, [checkCollision]);
+
+  // Find the side with the most available space around a reference point
+  const findSideWithMostSpace = useCallback((referencePosition, allNodes) => {
+    const offset = NODE_WIDTH + PADDING; // Distance to place node from reference
+    
+    // referencePosition is the center of the reference node
+    // Calculate positions for each side (top-left corner of new node)
+    const sides = [
+      { 
+        position: { x: referencePosition.x - NODE_WIDTH / 2, y: referencePosition.y - NODE_HEIGHT - offset }, 
+        name: 'top',
+        availableSpace: Infinity,
+        priority: 2 // Lower priority for vertical
+      },
+      { 
+        position: { x: referencePosition.x - NODE_WIDTH / 2, y: referencePosition.y + offset }, 
+        name: 'bottom',
+        availableSpace: Infinity,
+        priority: 2 // Lower priority for vertical
+      },
+      { 
+        position: { x: referencePosition.x - NODE_WIDTH - offset, y: referencePosition.y - NODE_HEIGHT / 2 }, 
+        name: 'left',
+        availableSpace: Infinity,
+        priority: 1 // Higher priority for horizontal
+      },
+      { 
+        position: { x: referencePosition.x + offset, y: referencePosition.y - NODE_HEIGHT / 2 }, 
+        name: 'right',
+        availableSpace: Infinity,
+        priority: 1 // Higher priority for horizontal
+      },
+    ];
+    
+    // Calculate available space for each side
+    for (const side of sides) {
+      // First check if the position itself is collision-free
+      if (checkCollision(side.position, allNodes)) {
+        side.availableSpace = 0;
+        continue;
+      }
+      
+      // Calculate distance to nearest node in that direction
+      let minDistance = Infinity;
+      
+      for (const node of allNodes) {
+        const nodeLeft = node.position.x;
+        const nodeRight = node.position.x + (node.width || NODE_WIDTH);
+        const nodeTop = node.position.y;
+        const nodeBottom = node.position.y + (node.height || NODE_HEIGHT);
+        
+        const sideLeft = side.position.x;
+        const sideRight = side.position.x + NODE_WIDTH;
+        const sideTop = side.position.y;
+        const sideBottom = side.position.y + NODE_HEIGHT;
+        
+        let distance = Infinity;
+        
+        if (side.name === 'top') {
+          // Check if node overlaps horizontally and is above
+          if (!(nodeRight < sideLeft || nodeLeft > sideRight)) {
+            if (nodeBottom <= sideTop) {
+              distance = sideTop - nodeBottom;
+            }
+          }
+        } else if (side.name === 'bottom') {
+          // Check if node overlaps horizontally and is below
+          if (!(nodeRight < sideLeft || nodeLeft > sideRight)) {
+            if (nodeTop >= sideBottom) {
+              distance = nodeTop - sideBottom;
+            }
+          }
+        } else if (side.name === 'left') {
+          // Check if node overlaps vertically and is to the left
+          if (!(nodeBottom < sideTop || nodeTop > sideBottom)) {
+            if (nodeRight <= sideLeft) {
+              distance = sideLeft - nodeRight;
+            }
+          }
+        } else if (side.name === 'right') {
+          // Check if node overlaps vertically and is to the right
+          if (!(nodeBottom < sideTop || nodeTop > sideBottom)) {
+            if (nodeLeft >= sideRight) {
+              distance = nodeLeft - sideRight;
+            }
+          }
+        }
+        
+        if (distance < minDistance) {
+          minDistance = distance;
+        }
+      }
+      
+      // If no nodes in that direction, set to a large value
+      side.availableSpace = minDistance === Infinity ? 10000 : minDistance;
+    }
+    
+    // ALWAYS prefer horizontal placement - try right first, then left
+    // Only use vertical (top/bottom) as absolute last resort
+    
+    // Try right side first
+    const rightSide = sides.find(s => s.name === 'right');
+    if (rightSide && !checkCollision(rightSide.position, allNodes)) {
+      return rightSide.position;
+    }
+    
+    // Try left side second
+    const leftSide = sides.find(s => s.name === 'left');
+    if (leftSide && !checkCollision(leftSide.position, allNodes)) {
+      return leftSide.position;
+    }
+    
+    // If both horizontal sides are blocked, try to find space near them
+    if (rightSide) {
+      const rightSpace = findEmptySpace(rightSide.position, allNodes);
+      if (rightSpace && !checkCollision(rightSpace, allNodes)) {
+        return rightSpace;
+      }
+    }
+    
+    if (leftSide) {
+      const leftSpace = findEmptySpace(leftSide.position, allNodes);
+      if (leftSpace && !checkCollision(leftSpace, allNodes)) {
+        return leftSpace;
+      }
+    }
+    
+    // Only use vertical as absolute last resort
+    const topSide = sides.find(s => s.name === 'top');
+    const bottomSide = sides.find(s => s.name === 'bottom');
+    
+    if (bottomSide && !checkCollision(bottomSide.position, allNodes)) {
+      return bottomSide.position;
+    }
+    
+    if (topSide && !checkCollision(topSide.position, allNodes)) {
+      return topSide.position;
+    }
+    
+    // Final fallback - use the side with most space
+    const bestSide = sides.reduce((best, current) => {
+      if (current.availableSpace > best.availableSpace) {
+        return current;
+      }
+      return best;
+    });
+    
+    // If the best side position has a collision, find empty space nearby
+    if (checkCollision(bestSide.position, allNodes)) {
+      return findEmptySpace(bestSide.position, allNodes);
+    }
+    
+    return bestSide.position;
+  }, [checkCollision, findEmptySpace]);
 
   // Find emptiest space closest to target point (for viewport-centered placement)
   const findClosestEmptySpace = useCallback((targetPosition, allNodes, maxRadius = 2000) => {
@@ -251,6 +407,18 @@ function Flow() {
     document.documentElement.classList.add('dark');
   }, []);
 
+  // Global keyboard shortcut: Cmd/Ctrl + F to open search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const onNodesChange = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
     [],
@@ -261,9 +429,141 @@ function Flow() {
     [],
   );
 
+  // Determine optimal target handle - the side of target node that faces the source
+  const getOptimalTargetHandle = useCallback((sourceNode, targetNode) => {
+    if (!sourceNode || !targetNode) return Position.Top;
+    
+    // Get node centers
+    const sourceCenterX = sourceNode.position.x + (sourceNode.width || 400) / 2;
+    const sourceCenterY = sourceNode.position.y + (sourceNode.height || 200) / 2;
+    const targetCenterX = targetNode.position.x + (targetNode.width || 400) / 2;
+    const targetCenterY = targetNode.position.y + (targetNode.height || 200) / 2;
+    
+    // Calculate direction vector from target to source (which side faces the source)
+    const dx = sourceCenterX - targetCenterX; // Positive = source is to the right
+    const dy = sourceCenterY - targetCenterY; // Positive = source is below
+    
+    // Determine which side of target faces the source
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    
+    // If horizontal distance is greater, use left or right side
+    if (absDx > absDy) {
+      // If source is to the right, use target's RIGHT side (facing source)
+      // If source is to the left, use target's LEFT side (facing source)
+      return dx > 0 ? Position.Right : Position.Left;
+    } 
+    // If vertical distance is greater, use top or bottom side
+    else {
+      // If source is below, use target's BOTTOM side (facing source)
+      // If source is above, use target's TOP side (facing source)
+      return dy > 0 ? Position.Bottom : Position.Top;
+    }
+  }, []);
+
+  // Determine optimal source handle - the side of source node that faces the target
+  const getOptimalSourceHandle = useCallback((sourceNode, targetNode) => {
+    if (!sourceNode || !targetNode) return Position.Bottom;
+    
+    // Get node centers
+    const sourceCenterX = sourceNode.position.x + (sourceNode.width || 400) / 2;
+    const sourceCenterY = sourceNode.position.y + (sourceNode.height || 200) / 2;
+    const targetCenterX = targetNode.position.x + (targetNode.width || 400) / 2;
+    const targetCenterY = targetNode.position.y + (targetNode.height || 200) / 2;
+    
+    // Calculate direction vector from source to target (which side faces the target)
+    const dx = targetCenterX - sourceCenterX; // Positive = target is to the right
+    const dy = targetCenterY - sourceCenterY; // Positive = target is below
+    
+    // Determine which side of source faces the target
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    
+    // If horizontal distance is greater, use left or right side
+    if (absDx > absDy) {
+      // If target is to the right, use source's RIGHT side (facing target)
+      // If target is to the left, use source's LEFT side (facing target)
+      return dx > 0 ? Position.Right : Position.Left;
+    } 
+    // If vertical distance is greater, use top or bottom side
+    else {
+      // If target is below, use source's BOTTOM side (facing target)
+      // If target is above, use source's TOP side (facing target)
+      return dy > 0 ? Position.Bottom : Position.Top;
+    }
+  }, []);
+
+  // Optimize edge handles based on current node positions
+  // This function recalculates optimal handles for all edges
+  const optimizeEdgeHandles = useCallback((currentNodes, currentEdges) => {
+    return currentEdges.map((edge) => {
+      const sourceNode = currentNodes.find(n => n.id === edge.source);
+      const targetNode = currentNodes.find(n => n.id === edge.target);
+      
+      if (sourceNode && targetNode) {
+        // Recalculate optimal handles based on current node positions
+        const optimalSourcePosition = getOptimalSourceHandle(sourceNode, targetNode);
+        const optimalTargetPosition = getOptimalTargetHandle(sourceNode, targetNode);
+        
+        return {
+          ...edge,
+          sourceHandle: `source-${optimalSourcePosition}`,
+          targetHandle: `target-${optimalTargetPosition}`,
+        };
+      }
+      
+      // Return edge unchanged if nodes not found
+      return edge;
+    });
+  }, [getOptimalSourceHandle, getOptimalTargetHandle]);
+
+  // Recalculate edge handles whenever nodes change (position, size, etc.)
+  // This ensures that when a board is loaded from the database, all edges get optimal handles
+  // Also recalculates when nodes are moved, ensuring handles always use optimal sides
+  useEffect(() => {
+    if (edges.length > 0 && nodes.length > 0) {
+      setEdges((currentEdges) => {
+        const optimizedEdges = optimizeEdgeHandles(nodes, currentEdges);
+        // Only update if handles actually changed (avoid unnecessary re-renders)
+        const needsUpdate = optimizedEdges.some((optEdge, idx) => {
+          const currentEdge = currentEdges[idx];
+          return !currentEdge || 
+                 optEdge.sourceHandle !== currentEdge.sourceHandle || 
+                 optEdge.targetHandle !== currentEdge.targetHandle;
+        });
+        
+        return needsUpdate ? optimizedEdges : currentEdges;
+      });
+    }
+  }, [nodes, optimizeEdgeHandles]); // Recalculate when nodes change (positions, sizes, etc.)
+
   const onConnect = useCallback(
-    (params) => setEdges((eds) => addEdge(params, eds)),
-    [],
+    (params) => {
+      // Get source and target nodes
+      const sourceNode = getNode(params.source);
+      const targetNode = getNode(params.target);
+      
+      if (sourceNode && targetNode) {
+        // Determine optimal source and target handles based on node positions
+        // This ensures the connection uses the best sides regardless of which handles were dragged
+        const optimalSourcePosition = getOptimalSourceHandle(sourceNode, targetNode);
+        const optimalTargetPosition = getOptimalTargetHandle(sourceNode, targetNode);
+        
+        // Override both handles with optimal ones
+        // This way we don't need to store which side was used - frontend determines it
+        const optimizedParams = {
+          ...params,
+          sourceHandle: `source-${optimalSourcePosition}`,
+          targetHandle: `target-${optimalTargetPosition}`,
+        };
+        
+        setEdges((eds) => addEdge(optimizedParams, eds));
+      } else {
+        // Fallback to original params if nodes not found
+        setEdges((eds) => addEdge(params, eds));
+      }
+    },
+    [getNode, getOptimalSourceHandle, getOptimalTargetHandle],
   );
 
   const toggleColorMode = useCallback(() => {
@@ -272,20 +572,30 @@ function Flow() {
 
   const onAddNode = useCallback(() => {
     setNodes((currentNodes) => {
-      // Get viewport center in world coordinates
-      const viewport = getViewport();
-      // Convert screen center to flow coordinates
-      // viewport has { x, y, zoom } where x,y are pan values
-      // Screen center in flow coordinates = (screenX - x) / zoom
-      const screenCenterX = window.innerWidth / 2;
-      const screenCenterY = window.innerHeight / 2;
-      const viewportCenter = {
-        x: (screenCenterX - viewport.x) / viewport.zoom,
-        y: (screenCenterY - viewport.y) / viewport.zoom,
-      };
+      let referencePosition;
+      
+      if (currentNodes.length === 0) {
+        // If canvas is empty, use viewport center
+        const viewport = getViewport();
+        const screenCenterX = window.innerWidth / 2;
+        const screenCenterY = window.innerHeight / 2;
+        referencePosition = {
+          x: (screenCenterX - viewport.x) / viewport.zoom,
+          y: (screenCenterY - viewport.y) / viewport.zoom,
+        };
+      } else {
+        // Use the most recently added node (last in array) as reference
+        // Use the node's center position
+        const lastNode = currentNodes[currentNodes.length - 1];
+        referencePosition = {
+          x: lastNode.position.x + (lastNode.width || NODE_WIDTH) / 2,
+          y: lastNode.position.y + (lastNode.height || NODE_HEIGHT) / 2,
+        };
+      }
 
-      // Find the emptiest space closest to viewport center
-      const finalPosition = findClosestEmptySpace(viewportCenter, currentNodes);
+      // Find the side with the most available space
+      // Prefer horizontal (left/right) placement
+      const finalPosition = findSideWithMostSpace(referencePosition, currentNodes);
 
       // If canvas is empty, make this node the root node
       const isRoot = currentNodes.length === 0;
@@ -303,7 +613,7 @@ function Flow() {
       };
       return currentNodes.concat(newNode);
     });
-  }, [handleAddConnectedNode, findClosestEmptySpace, getViewport]);
+  }, [handleAddConnectedNode, findSideWithMostSpace, getViewport]);
 
   const onClear = useCallback(() => {
     // Keep root nodes, remove all others
@@ -312,9 +622,23 @@ function Flow() {
   }, []);
 
   const onSearch = useCallback(() => {
-    // Placeholder for search functionality
-    console.log('Search nodes');
+    setIsSearchOpen(true);
   }, []);
+
+  const handleSelectNode = useCallback((nodeId) => {
+    const node = getNode(nodeId);
+    if (node) {
+      // Center the viewport on the selected node with smooth animation
+      // Account for node dimensions to center it properly
+      const nodeWidth = node.width || 400;
+      const nodeHeight = node.height || 200;
+      setCenter(
+        node.position.x + nodeWidth / 2, 
+        node.position.y + nodeHeight / 2, 
+        { zoom: 1.2, duration: 400 }
+      );
+    }
+  }, [getNode, setCenter]);
 
   return (
     <Layout>
@@ -340,6 +664,19 @@ function Flow() {
         <Background />
         <MiniMap />
       </ReactFlow>
+      {/* Floating bn.ai text in corner */}
+      <div className="absolute top-4 left-4 z-10 pointer-events-none">
+        <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-200" style={{ fontFamily: "'Azeret Mono', monospace", fontWeight: 600 }}>bn.ai</h1>
+      </div>
+
+      {/* Search Modal */}
+      <SearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        nodes={nodes}
+        onSelectNode={handleSelectNode}
+        colorMode={colorMode}
+      />
     </Layout>
   );
 }
