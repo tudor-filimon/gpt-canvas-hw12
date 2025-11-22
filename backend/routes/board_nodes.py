@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Path
 from typing import List
-from schema.schemas import NodeCreate, NodeUpdate, NodeResponse, NodeBulkUpdate, NodeBase
+from schema.schemas import NodeCreate, NodeBase
 from database import supabase
 
 router = APIRouter()
@@ -16,7 +16,7 @@ async def get_board_nodes(board_id: str = Path(..., description="Board ID")):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{board_id}/nodes", response_model=NodeResponse)
+@router.post("/{board_id}/nodes", response_model=NodeBase)
 async def create_node(
     board_id: str = Path(..., description="Board ID"),
     node_data: NodeCreate = None
@@ -71,7 +71,7 @@ async def get_node(
 async def update_node(
     board_id: str = Path(..., description="Board ID"),
     node_id: str = Path(..., description="Node ID"),
-    node_data: NodeUpdate = None
+    node_data: NodeBase = None
 ):
     """Update a node"""
     try:
@@ -154,7 +154,7 @@ async def delete_node(
 @router.patch("/{board_id}/nodes/bulk", response_model=dict)
 async def bulk_update_nodes(
     board_id: str = Path(..., description="Board ID"),
-    bulk_data: NodeBulkUpdate = None
+    bulk_data: List[NodeBase] = None
 ):
     """Bulk update multiple nodes in this board"""
     updated_nodes = []

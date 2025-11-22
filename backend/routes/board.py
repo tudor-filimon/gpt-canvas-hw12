@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Path
 from typing import List
-from schema.schemas import BoardBase, BoardUpdate
+from schema.schemas import BoardBase
 from database import supabase
 import uuid
 
