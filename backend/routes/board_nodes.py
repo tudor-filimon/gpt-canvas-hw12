@@ -35,7 +35,7 @@ async def create_node(
             "width": node_data.width,
             "height": node_data.height,
             "title": node_data.title,
-            "prompt": node_data.content,
+            "prompt": node_data.prompt,
             "response": None,
             "role": node_data.role or "user",
             "is_collapsed": node_data.is_collapsed,

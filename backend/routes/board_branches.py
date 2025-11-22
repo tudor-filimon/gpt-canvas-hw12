@@ -59,8 +59,7 @@ async def branch_highlight(
             "source_node_id": branch_data.source_node_id,
             "target_node_id": new_node_id,
             "edge_type": "default",
-            "label": None,
-            "is_deleted": False
+            "label": None
         }
         
         edge_result = supabase.table("edges").insert(edge_insert).execute()
@@ -132,8 +131,7 @@ async def branch_full(
             "source_node_id": branch_data.source_node_id,
             "target_node_id": new_node_id,
             "edge_type": "default",
-            "label": None,
-            "is_deleted": False
+            "label": None
         }
         
         edge_result = supabase.table("edges").insert(edge_insert).execute()

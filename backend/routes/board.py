@@ -54,7 +54,7 @@ async def get_board(board_id: str = Path(..., description="Board ID")):
             raise HTTPException(status_code=404, detail="Board not found")
         
         nodes_result = supabase.table("nodes").select("*").eq("board_id", board_id).execute()
-        edges_result = supabase.table("edges").select("*").eq("board_id", board_id).eq("is_deleted", False).execute()
+        edges_result = supabase.table("edges").select("*").eq("board_id", board_id).execute()
         
         return {
             "board": board_result.data[0],

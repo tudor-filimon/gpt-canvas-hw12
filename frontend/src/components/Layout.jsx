@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Sidebar from './Sidebar';
 
-export default function Layout({ children }) {
+export default function Layout({ children, onBoardSwitch }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   return (
@@ -9,6 +9,7 @@ export default function Layout({ children }) {
       <Sidebar 
         isCollapsed={isSidebarCollapsed} 
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+        onBoardSwitch={onBoardSwitch}
       />
       <main className="flex-1 relative h-full w-full">
         {children}

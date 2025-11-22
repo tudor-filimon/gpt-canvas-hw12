@@ -12,6 +12,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
+import { boardAPI, nodeAPI, edgeAPI } from './utils/api'; // ********** NEW CODE HERE **********
+
 import ChatNode from './components/ChatNode.jsx';
 import Layout from './components/Layout.jsx';
 import Hotbar from './components/Hotbar.jsx';
@@ -27,6 +29,10 @@ function Flow() {
   const [edges, setEdges] = useState([]);
   const [colorMode, setColorMode] = useState('dark');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // ********** NEW CODE HERE **********
+  const [boardId, setBoardId] = useState('board-001'); // Default board ID. First one it opens when website opens
+  const [isLoading, setIsLoading] = useState(true);  
 
   // Node dimensions (approximate)
   const NODE_WIDTH = 400;
@@ -348,6 +354,7 @@ function Flow() {
         data: { 
           label: 'New Node', 
           messages: [],
+          boardId: boardId, // Pass the board ID to the node
           onAddNode: handleAddConnectedNode // Pass the function recursively
         },
       };
@@ -364,7 +371,7 @@ function Flow() {
       setEdges((eds) => addEdge(newEdge, eds));
       return currentNodes.concat(newNode);
     });
-  }, [findEmptySpace, setEdges]);
+  }, [findEmptySpace, setEdges, boardId]);
 
   // Helper to get opposite direction for target handle
   const getOppositeDirection = (direction) => {
@@ -377,9 +384,71 @@ function Flow() {
     }
   };
 
+  // ********** NEW CODE HERE ********** JOWEJFIOWEJFIOWEFJOWIEFJIOFJWEOFIJWEOFIJEWFIOWJOWEIJFOIEFJWOEFIJ
+  const loadBoardData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      console.log('Loading board:', boardId);
+      
+      // Call the GET endpoint
+      const boardData = await boardAPI.getBoard(boardId);
+      
+      console.log('Board data received:', boardData);
+      
+      // Convert database nodes to React Flow format
+      const flowNodes = (boardData.nodes || []).map(node => ({
+        id: node.id,
+        type: 'chat',
+        position: { x: node.x, y: node.y },
+        data: {
+          label: node.title || 'New Chat',
+          messages: node.content ? [{ role: node.role || 'assistant', content: node.content }] : [],
+          model: node.model || 'gpt-4o',
+          isRoot: node.is_root || false,
+          isStarred: node.is_starred || false,
+          boardId: boardId,
+          onAddNode: handleAddConnectedNode,
+        },
+        width: node.width,
+        height: node.height,
+      }));
+      
+      // Convert database edges to React Flow format
+      const flowEdges = (boardData.edges || []).map(edge => ({
+        id: edge.id,
+        source: edge.source_node_id,
+        target: edge.target_node_id,
+        type: edge.edge_type || 'default',
+        label: edge.label,
+      }));
+      
+      console.log('Converted nodes:', flowNodes);
+      console.log('Converted edges:', flowEdges);
+      
+      // Update state with loaded data
+      setNodes(flowNodes);
+      setEdges(flowEdges);
+      
+    } catch (error) {
+      console.error('Failed to load board:', error);
+      // If board doesn't exist, you might want to create it or show an error
+      // For now, just log the error
+      setNodes([]);
+      setEdges([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [boardId, handleAddConnectedNode]); 
+
+  // Function to switch to a different board
+  const switchBoard = useCallback(async (newBoardId) => {
+    setBoardId(newBoardId);
+    // loadBoardData will be called automatically via useEffect when boardId changes
+  }, []);
+  
   // Initial Nodes State
   const [nodes, setNodes] = useState([
-    { 
+    /*{ 
       id: 'node-1', 
       type: 'chat', 
       position: { x: 100, y: 100 }, 
@@ -391,7 +460,7 @@ function Flow() {
         onAddNode: handleAddConnectedNode // Inject handler
       } 
     },
-  ]);
+  */]);
 
   // Handle dark mode class on html/body
   useEffect(() => {
@@ -406,6 +475,12 @@ function Flow() {
   useEffect(() => {
     document.documentElement.classList.add('dark');
   }, []);
+
+  // ********** NEW CODE HERE **********
+  // Load board data on initial mount
+  useEffect(() => {
+    loadBoardData();
+  }, [loadBoardData, boardId]);
 
   // Global keyboard shortcut: Cmd/Ctrl + F to open search
   useEffect(() => {
@@ -608,12 +683,13 @@ function Flow() {
           label: 'New Node', 
           messages: [],
           isRoot: isRoot, // Mark as root if canvas is empty
+          boardId: boardId, // Pass the board ID to the node
           onAddNode: handleAddConnectedNode // Ensure new manual nodes also have the handler
         },
       };
       return currentNodes.concat(newNode);
     });
-  }, [handleAddConnectedNode, findSideWithMostSpace, getViewport]);
+  }, [handleAddConnectedNode, findSideWithMostSpace, getViewport, boardId]);
 
   const onClear = useCallback(() => {
     // Keep root nodes, remove all others
@@ -641,7 +717,13 @@ function Flow() {
   }, [getNode, setCenter]);
 
   return (
-    <Layout>
+    <Layout onBoardSwitch={switchBoard}>
+      {isLoading ? (
+        <div className="flex items-center justify-center h-screen">
+          <p className="text-neutral-600 dark:text-neutral-400">Loading board...</p>
+      </div>
+    ) : (
+      <>
       <Hotbar 
         onAddNode={onAddNode} 
         onClear={onClear} 
@@ -677,6 +759,8 @@ function Flow() {
         onSelectNode={handleSelectNode}
         colorMode={colorMode}
       />
+      </>
+    )}
     </Layout>
   );
 }

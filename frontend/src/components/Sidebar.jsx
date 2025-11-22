@@ -8,7 +8,9 @@ import {
   PanelRightOpen,
 } from "lucide-react";
 
-export default function Sidebar({ isCollapsed, onToggleCollapse }) {
+import { boardAPI, nodeAPI } from '../utils/api';
+
+export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch }) {
   const [boards, setBoards] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [boardName, setBoardName] = useState("");
@@ -16,7 +18,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse }) {
   // GET ALL BOARDS //
   const getBoards = async () => {
     try {
-      const response = await fetch("http://0.0.0.0:8000/api/boards/");
+      const response = await fetch("http://localhost:8000/api/boards/");
       const data = await response.json();
       console.log("Boards fetched:", data);
       setBoards(data);
@@ -35,17 +37,41 @@ export default function Sidebar({ isCollapsed, onToggleCollapse }) {
     if (!boardName.trim()) return;
 
     try {
-      const response = await fetch("http://0.0.0.0:8000/api/boards/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: boardName }),
-      });
-      const data = await response.json();
-      console.log("Board created:", data);
+      // 1. Create the board
+      const boardData = await boardAPI.createBoard(boardName);
+      console.log("Board created:", boardData);
+      const newBoardId = boardData.id;
 
+      // 2. Create a root node for the new board
+      // Position it at the center of the viewport (you can adjust this)
+      const rootNodeData = {
+        id: `node-${Date.now()}`,
+        board_id: newBoardId,
+        x: 100, // Default position - you can center it based on viewport
+        y: 100,
+        width: 400,
+        height: null, // Auto height
+        title: 'New Chat',
+        prompt: null,
+        role: 'user',
+        is_root: true, // IMPORTANT: Mark as root node
+        is_collapsed: false,
+        is_starred: false,
+        model: 'gemini-pro',
+      };
+
+      const rootNode = await nodeAPI.createNode(newBoardId, rootNodeData);
+      console.log("Root node created:", rootNode);
+
+      // 3. Close modal and refresh board list
       setShowModal(false);
       setBoardName("");
       getBoards();
+
+      // 4. Switch to the new board
+      if (onBoardSwitch) {
+        onBoardSwitch(newBoardId);
+      }
     } catch (error) {
       console.error("Error creating board:", error);
     }
@@ -55,7 +81,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse }) {
   const deleteBoard = async (boardId) => {
     try {
       const response = await fetch(
-        `http://0.0.0.0:8000/api/boards/${boardId}/`,
+        `http://localhost:8000/api/boards/${boardId}/`,
         {
           method: "DELETE",
         }
@@ -78,6 +104,13 @@ export default function Sidebar({ isCollapsed, onToggleCollapse }) {
   const handleKeyPress = (e) => {
     if (e.key === "Enter") {
       createBoard();
+    }
+  };
+
+  // Handle board click to switch
+  const handleBoardClick = (boardId) => {
+    if (onBoardSwitch) {
+      onBoardSwitch(boardId);
     }
   };
 
@@ -188,6 +221,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse }) {
               {boards.map((board) => (
                 <li key={board.id} className="group flex items-center gap-2">
                   <button
+                    onClick={() => handleBoardClick(board.id)}
                     className="flex-1 py-1.5 px-2 rounded-lg text-base text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-left"
                     title={board.name}
                   >

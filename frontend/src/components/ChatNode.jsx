@@ -11,6 +11,8 @@ import {
   // Pencil, // COMMENTED OUT - no longer editing titles
 } from 'lucide-react';
 
+import { nodeAPI } from '../utils/api'; // Connecting to backend
+
 const ChatMessage = ({ role, content }) => (
   <div className={`flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
     <div
@@ -159,16 +161,62 @@ export default function ChatNode({ data, id, isConnectable }) {
   //   }
   // }, [isEditingTitle]);
 
-  const handleSend = useCallback(() => {
+  // ********** NEW CODE HERE **********
+  const handleSend = useCallback(async () => {
     if (!input.trim()) return;
-    const newMessages = [...messages, { role: 'user', content: input }];
+    const userMessage = { role: 'user', content: input };
+    const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput('');
     setHasSent(true);
+
+    setMessages((prev) => [...prev, { role: 'assistant', content: '...' }]);
+
+    /* Temporary mock response
     setTimeout(() => {
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.This is a mock AI response.' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'This is a mock AI response.' }]);
     }, 1000);
-  }, [input, messages]);
+  }, [input, messages]);*/
+
+  try {
+    // Get board ID from node data or use a default
+    const boardId = data.boardId || 'board-001'; // You'll need to pass this from App.jsx
+    
+    // Call the API to get LLM response
+    const response = await nodeAPI.updateNode(boardId, id, {
+      prompt: input,
+      temperature: 0.7, // Optional: you can make this configurable
+    });
+
+    setMessages((prev) => {
+      const updated = [...prev];
+      updated[updated.length - 1] = {
+        role: 'assistant',
+        content: response.content || 'No response received',
+      };
+      return updated;
+    });
+    
+    // Update node data with the response
+    updateNode(id, {
+      data: {
+        ...data,
+        messages: [...newMessages, { role: 'assistant', content: response.content }],
+      },
+    });
+  } catch (error) {
+    console.error('Failed to get AI response:', error);
+    setMessages((prev) => {
+      const updated = [...prev];
+      updated[updated.length - 1] = {
+        role: 'assistant',
+        content: `Error: ${error.message}`,
+      };
+      return updated;
+    });
+  }
+  }, [input, messages, id, data, updateNode]);
+  // ********** NEW CODE STOPS HERE **********
 
   const handleDelete = useCallback(() => {
     deleteElements({ nodes: [{ id }] });
