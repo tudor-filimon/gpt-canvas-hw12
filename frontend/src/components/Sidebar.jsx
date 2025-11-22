@@ -9,10 +9,16 @@ import {
   PanelRightOpen,
 } from "lucide-react";
 
-import { boardAPI } from '../utils/api';
-import SearchBoardsModal from './SearchBoardsModal';
+import { boardAPI, nodeAPI } from "../utils/api";
+import SearchBoardsModal from "./SearchBoardsModal";
 
-export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, currentBoardId, colorMode = 'dark' }) {
+export default function Sidebar({
+  isCollapsed,
+  onToggleCollapse,
+  onBoardSwitch,
+  currentBoardId,
+  colorMode = "dark",
+}) {
   const [boards, setBoards] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -40,12 +46,12 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (menuOpenId && !event.target.closest('.menu-container')) {
+      if (menuOpenId && !event.target.closest(".menu-container")) {
         setMenuOpenId(null);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [menuOpenId]);
 
   // CREATE NEW BOARD //
@@ -58,7 +64,28 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
       console.log("Board created:", boardData);
       const newBoardId = boardData.id;
 
-      // 2. Close modal and refresh board list
+      // 2. Create a root node for the new board
+      // Position it at the center of the viewport (you can adjust this)
+      const rootNodeData = {
+        id: `node-${Date.now()}`,
+        board_id: newBoardId,
+        x: 100, // Default position - you can center it based on viewport
+        y: 100,
+        width: 400,
+        height: null, // Auto height
+        title: "New Chat",
+        prompt: null,
+        role: "user",
+        is_root: true, // IMPORTANT: Mark as root node
+        is_collapsed: false,
+        is_starred: false,
+        model: "gemini-pro",
+      };
+
+      const rootNode = await nodeAPI.createNode(newBoardId, rootNodeData);
+      console.log("Root node created:", rootNode);
+
+      // 3. Close modal and refresh board list
       setShowModal(false);
       setBoardName("");
       getBoards();
@@ -98,7 +125,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
       setMenuOpenId(null);
       // If we deleted the current board, switch to first available board
       if (boardId === currentBoardId && boards.length > 1) {
-        const remainingBoards = boards.filter(b => b.id !== boardId);
+        const remainingBoards = boards.filter((b) => b.id !== boardId);
         if (remainingBoards.length > 0 && onBoardSwitch) {
           onBoardSwitch(remainingBoards[0].id);
         }
@@ -140,7 +167,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
   };
 
   // Get current board name for breadcrumbs
-  const currentBoard = boards.find(b => b.id === currentBoardId);
+  const currentBoard = boards.find((b) => b.id === currentBoardId);
 
   // COLLAPSED VIEW
   if (isCollapsed) {
@@ -230,7 +257,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
           </button>
 
           {/* Search Button */}
-          <button 
+          <button
             onClick={() => setShowSearchModal(true)}
             className="w-full flex items-center gap-2 py-2 px-4 rounded-lg text-base text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
           >
@@ -251,7 +278,12 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
             </div>
             <ul className="space-y-0.5">
               {boards.map((board) => (
-                <li key={board.id} className="group relative">
+                <li
+                  key={board.id}
+                  className={`group relative ${
+                    menuOpenId === board.id ? "z-[100]" : "z-0"
+                  }`}
+                >
                   {editingBoardId === board.id ? (
                     // Edit mode
                     <div className="flex items-center gap-2">
@@ -262,7 +294,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
                         onKeyDown={(e) => handleRenameKeyPress(e, board.id)}
                         onBlur={() => renameBoard(board.id)}
                         autoFocus
-                        className="flex-1 py-1.5 px-4 rounded-lg text-base text-neutral-900 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="flex-1 py-1.5 px-4 rounded-lg text-base text-neutral-900 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 focus:outline-none focus:ring-1 focus:ring-neutral-400 dark:focus:ring-neutral-600"
                       />
                     </div>
                   ) : (
@@ -272,8 +304,8 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
                         onClick={() => handleBoardClick(board.id)}
                         className={`w-full py-1.5 px-4 rounded-lg text-base text-left transition-colors ${
                           currentBoardId === board.id
-                            ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-200 font-medium'
-                            : 'text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                            ? "bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-200 font-medium"
+                            : "text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
                         }`}
                         title={board.name}
                       >
@@ -283,15 +315,20 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setMenuOpenId(menuOpenId === board.id ? null : board.id);
+                            setMenuOpenId(
+                              menuOpenId === board.id ? null : board.id
+                            );
                           }}
                           className="opacity-0 group-hover/item:opacity-100 p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all"
                           title="More options"
                         >
-                          <MoreVertical size={14} className="text-neutral-500 dark:text-neutral-400" />
+                          <MoreVertical
+                            size={14}
+                            className="text-neutral-500 dark:text-neutral-400"
+                          />
                         </button>
                         {menuOpenId === board.id && (
-                          <div className="absolute right-0 top-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg z-50 min-w-[120px]">
+                          <div className="absolute right-0 top-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg z-[100] min-w-[120px]">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -324,7 +361,6 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
             </ul>
           </div>
         </div>
-
       </aside>
 
       {/* Search Boards Modal */}
@@ -339,8 +375,14 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
 
       {/* Create Board Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowModal(false)}>
-          <div className="bg-white dark:bg-neutral-800 rounded-lg p-6 w-96 border border-neutral-200 dark:border-neutral-700 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-neutral-800 rounded-lg p-6 w-96 border border-neutral-200 dark:border-neutral-700 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-200 mb-4">
               Create New Board
             </h2>
@@ -352,7 +394,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
               onKeyDown={handleKeyPress}
               placeholder="Enter board name..."
               autoFocus
-              className="w-full px-3 py-2 mb-4 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg text-neutral-900 dark:text-neutral-200 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 mb-4 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg text-neutral-900 dark:text-neutral-200 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:focus:ring-neutral-600"
             />
 
             <div className="flex gap-3 justify-end">
@@ -364,7 +406,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, 
               </button>
               <button
                 onClick={createBoard}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium transition-colors"
+                className="px-4 py-2 bg-neutral-900 dark:bg-white hover:bg-neutral-800 dark:hover:bg-neutral-100 rounded-lg text-white dark:text-neutral-900 font-medium transition-colors"
               >
                 Create
               </button>

@@ -23,6 +23,7 @@ class EdgeType(str, Enum):
 
 class Position(BaseModel):
     # React Flow position object
+    id: str
     x: float
     y: float
 
@@ -45,7 +46,6 @@ class ReactFlowEdge(BaseModel):
     source: str  # Source node ID
     target: str  # Target node ID
     type: Optional[str] = "default"
-    label: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
     animated: Optional[bool] = False
     selected: Optional[bool] = False
@@ -149,6 +149,11 @@ class NodeUpdate(BaseModel):
     is_starred: Optional[bool] = None
     model: Optional[str] = None
 
+class NodePosition(BaseModel):
+    """Schema for updating node position only"""
+    x: float
+    y: float
+
 # ---------------------------- Database Edge Schemas (for Supabase storage) ----------------------------------#
 
 class EdgeBase(BaseModel):
@@ -158,7 +163,6 @@ class EdgeBase(BaseModel):
     source_node_id: str  # Source node ID (string)
     target_node_id: str  # Target node ID (string)
     edge_type: Optional[str] = "default"
-    label: Optional[str] = None
 
 # ============================================================================
 # ---------------------------- Chat Message Schemas ----------------------------------#

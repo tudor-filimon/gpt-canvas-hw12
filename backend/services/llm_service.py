@@ -19,6 +19,19 @@ class LLMService:
         self.default_model = "gemini-2.5-flash-lite"
         self.default_temperature = 0.5
         self.default_max_tokens = 1024
+        # ADD THIS: Formatting presets
+        self.formatting_styles = {
+            "plain": """Respond in plain text only. No markdown, headers, bold, italic, or lists. 
+Use clear sentences and paragraphs.""",
+            
+            "concise": """Be extremely concise. No formatting. Direct answers only. 
+Maximum 2-3 sentences.""",
+            
+            "structured": """Respond in this format:
+Summary: [one sentence]
+Details: [2-3 clear paragraphs in plain text]
+Key Point: [one important takeaway]""",
+        }
         
     def _get_node_context(self, node_id: str) -> Optional[LLMNodeContext]:
         """Fetch node data from database to use as context"""
@@ -53,6 +66,7 @@ class LLMService:
             stored_context = node_result.data[0].get("context") if node_result.data else None
             
             if stored_context:
+                prompt_parts.append(self.formatting_styles["plain"])
                 prompt_parts.append(stored_context)
                 prompt_parts.append("\n" + "=" * 50 + "\n")
         except Exception as e:

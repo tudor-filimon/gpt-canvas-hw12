@@ -32,8 +32,7 @@ async def create_edge(
             "board_id": edge_data.board_id,
             "source_node_id": edge_data.source_node_id,
             "target_node_id": edge_data.target_node_id,
-            "edge_type": edge_data.edge_type or "default",
-            "label": edge_data.label,
+            "edge_type": edge_data.edge_type or "default"
         }
         
         result = supabase.table("edges").insert(insert_data).execute()
@@ -82,8 +81,7 @@ async def update_edge(
             update_data["target_node_id"] = edge_data.target_node_id
         if edge_data.edge_type is not None:
             update_data["edge_type"] = edge_data.edge_type
-        if edge_data.label is not None:
-            update_data["label"] = edge_data.label
+        
         
         
         if not update_data:

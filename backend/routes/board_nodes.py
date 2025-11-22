@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Body
 from typing import List, Optional
-from schema.schemas import NodeCreate, NodeBase, NodeUpdate
+from schema.schemas import NodeCreate, NodeBase, NodeUpdate, NodePosition
 from database import supabase
 
 router = APIRouter()
@@ -15,7 +15,7 @@ async def get_board_nodes(board_id: str = Path(..., description="Board ID")):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Creates a node
 @router.post("/{board_id}/nodes", response_model=NodeBase)
 async def create_node(
     board_id: str = Path(..., description="Board ID"),
@@ -54,7 +54,7 @@ async def create_node(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Get a specific node
 @router.get("/{board_id}/nodes/{id}", response_model=NodeBase)
 async def get_node(
     board_id: str = Path(..., description="Board ID"),
@@ -71,7 +71,7 @@ async def get_node(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Update a node - llm call
 @router.patch("/{board_id}/nodes/{id}", response_model=NodeBase)
 async def update_node(
     board_id: str = Path(..., description="Board ID"),
@@ -100,6 +100,7 @@ async def update_node(
                 raise HTTPException(status_code=500, detail=f"LLM call failed: {llm_response.error}")
             
             update_data = {
+                "prompt": node_data.prompt,
                 "response": llm_response.generated_content,
                 "role": "assistant"
             }
@@ -153,7 +154,33 @@ async def update_node(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Update a node position
+@router.patch("/{board_id}/nodes/{id}/position", response_model=NodeBase)
+async def update_node_position(
+    board_id: str = Path(..., description="Board ID"),
+    id: str = Path(..., description="Node ID"),
+    position: NodePosition = Body(..., description="New position")
+):
+    """Update a node position"""
+    try:
+        check = supabase.table("nodes").select("id").eq("id", id).eq("board_id", board_id).execute()
+        if not check.data:
+            raise HTTPException(status_code=404, detail="Node not found in this board")
+        
+        update_data = {
+            "x": position.x,
+            "y": position.y,
+        }
+        result = supabase.table("nodes").update(update_data).eq("id", id).execute()
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to update node position")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
+# Delete a node
 @router.delete("/{board_id}/nodes/{id}", response_model=dict)
 async def delete_node(
     board_id: str = Path(..., description="Board ID"),
@@ -172,7 +199,7 @@ async def delete_node(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# Bulk update multiple nodes
 @router.patch("/{board_id}/nodes/bulk", response_model=dict)
 async def bulk_update_nodes(
     board_id: str = Path(..., description="Board ID"),
