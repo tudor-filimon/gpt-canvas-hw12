@@ -8,7 +8,7 @@ import {
   ChevronDown, 
   ChevronUp,
   Plus,
-  // Pencil, // COMMENTED OUT - no longer editing titles
+  Pencil, // COMMENTED OUT - no longer editing titles
 } from 'lucide-react';
 
 import { nodeAPI } from '../utils/api'; // Connecting to backend
@@ -123,14 +123,14 @@ export default function ChatNode({ data, id, isConnectable }) {
   const isRoot = data.isRoot || false;
   
   // Title editing state - COMMENTED OUT FOR NOW
-  // const [isEditingTitle, setIsEditingTitle] = useState(false);
-  // const [title, setTitle] = useState(data.label || "New Node");
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [title, setTitle] = useState(data.label || "New Node");
   
   // Use node ID as the title (will be replaced with board ID from database)
-  const title = id; // For now, use node ID. Later: data.boardId or similar
+  // const title = id; // For now, use node ID. Later: data.boardId or similar
   
   const textareaRef = useRef(null);
-  // const titleInputRef = useRef(null); // COMMENTED OUT - no longer editing titles
+  const titleInputRef = useRef(null); // ENABLED
   const resizeHandleRef = useRef(null);
   const nodeContainerRef = useRef(null);
   const { deleteElements, updateNode } = useReactFlow();
@@ -154,12 +154,12 @@ export default function ChatNode({ data, id, isConnectable }) {
     }
   }, [input]);
 
-  // Focus title input when editing starts - COMMENTED OUT
-  // useEffect(() => {
-  //   if (isEditingTitle && titleInputRef.current) {
-  //     titleInputRef.current.focus();
-  //   }
-  // }, [isEditingTitle]);
+  // Focus title input when editing starts - ENABLED
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+    }
+  }, [isEditingTitle]);
 
   // ********** NEW CODE HERE **********
   const handleSend = useCallback(async () => {
@@ -232,7 +232,29 @@ export default function ChatNode({ data, id, isConnectable }) {
   //   setIsEditingTitle(false);
   //   // Here you would typically notify parent to update node data
   // };
-
+  const handleTitleSubmit = useCallback(async () => {
+    setIsEditingTitle(false);
+    
+    // Update the node data in React Flow
+    updateNode(id, {
+      data: {
+        ...data,
+        label: title,
+      },
+    });
+    
+    // Update the database via API
+    try {
+      const boardId = data.boardId || 'board-001';
+      await nodeAPI.updateNode(boardId, id, {
+        title: title,
+      });
+    } catch (error) {
+      console.error('Failed to update title:', error);
+      // Optionally revert the title on error
+      setTitle(data.label || "New Node");
+    }
+  }, [title, id, data, updateNode]);
   // Resize handlers - supports both width and height
   const handleResizeStart = useCallback((e) => {
     e.preventDefault();
@@ -354,19 +376,27 @@ export default function ChatNode({ data, id, isConnectable }) {
         <div className="flex items-center gap-2">
           <GripVertical size={16} className="text-neutral-400" />
           
-          {/* Title - Non-editable, using node ID (will be board ID from database) */}
-          {/* {isEditingTitle ? (
+          {/* Title - Editable */}
+          {isEditingTitle ? (
             <input
               ref={titleInputRef}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={handleTitleSubmit}
-              onKeyDown={(e) => e.key === 'Enter' && handleTitleSubmit()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleTitleSubmit();
+                } else if (e.key === 'Escape') {
+                  setIsEditingTitle(false);
+                  setTitle(data.label || "New Node");
+                }
+              }}
               className="bg-neutral-100 dark:bg-neutral-800 font-medium text-neutral-900 dark:text-neutral-100 text-sm rounded-full px-3 py-1 focus:outline-none max-w-[150px]"
             />
           ) : (
             <div 
-              className="flex items-center gap-2 cursor-pointer"
+              className="flex items-center gap-2 cursor-pointer group/title"
               onClick={() => setIsEditingTitle(true)}
             >
               <span className="font-medium text-neutral-700 dark:text-neutral-200 text-sm max-w-[150px] truncate select-none">
@@ -374,12 +404,7 @@ export default function ChatNode({ data, id, isConnectable }) {
               </span>
               <Pencil size={12} className="text-neutral-400 opacity-0 group-hover/title:opacity-100 transition-opacity" />
             </div>
-          )} */}
-          <span 
-            className="text-neutral-500 dark:text-neutral-500 text-sm max-w-[150px] truncate select-none font-mono"
-          >
-            {title}
-          </span>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
