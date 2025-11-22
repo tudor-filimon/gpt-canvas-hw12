@@ -275,7 +275,7 @@ export default function ChatNode({ data, id, isConnectable }) {
           ...data,
           messages: [
             ...newMessages,
-            { role: "assistant", content: response.content },
+            { role: "assistant", content: response.response }, // FIX: response.response, not response.content
           ],
         },
       });
