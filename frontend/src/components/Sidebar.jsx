@@ -1,4 +1,5 @@
 import React from 'react';
+import { SquarePen, Search } from 'lucide-react';
 
 export default function Sidebar() {
   const canvases = [
@@ -8,30 +9,44 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="w-64 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-colors duration-200">
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h1 className="text-xl font-bold text-gray-800 dark:text-white">bn.ai</h1>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto p-2">
-        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-2">
-          Saved Canvases
-        </div>
-        <ul className="space-y-1">
-          {canvases.map((canvas) => (
-            <li key={canvas.id}>
-              <button className="w-full text-left px-3 py-2 rounded-md text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                {canvas.name}
-              </button>
-            </li>
-          ))}
-        </ul>
+    <aside className="w-64 h-full bg-neutral-900 border-r border-neutral-800 flex flex-col">
+      {/* Header */}
+      <div className="p-4 border-b border-neutral-800">
+        <h1 className="text-xl font-bold text-neutral-200">bn.ai</h1>
       </div>
 
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-        <button className="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
-          New Canvas
+      {/* Top Section */}
+      <div className="p-3 space-y-0.5">
+        {/* New Canvas Button */}
+        <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-base text-neutral-200 hover:bg-neutral-800 transition-colors">
+          <SquarePen size={16} className="text-neutral-400" />
+          <span>New canvas</span>
         </button>
+
+        {/* Search Button */}
+        <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-base text-neutral-200 hover:bg-neutral-800 transition-colors">
+          <Search size={16} className="text-neutral-400" />
+          <span>Search chats</span>
+        </button>
+      </div>
+
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
+        {/* Saved Canvases Section */}
+        <div className="px-3 py-2">
+          <div className="text-sm text-neutral-500 mb-2 px-0">
+            Saved canvases
+          </div>
+          <ul className="space-y-0.5">
+            {canvases.map((canvas) => (
+              <li key={canvas.id}>
+                <button className="w-full px-0 py-1.5 rounded-lg text-base text-neutral-200 hover:bg-neutral-800 transition-colors text-left">
+                  <span className="truncate">{canvas.name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </aside>
   );

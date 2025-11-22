@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   ReactFlow,
-  Controls,
   Background,
   MiniMap,
   applyNodeChanges,
@@ -339,7 +338,6 @@ function Flow() {
         colorMode={colorMode}
       >
         <Background />
-        <Controls />
         <MiniMap />
       </ReactFlow>
     </Layout>
