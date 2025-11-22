@@ -1,16 +1,17 @@
 from fastapi import APIRouter, HTTPException, Path
 from typing import List
-from schema.schemas import NodeCreate, NodeUpdate, NodeResponse, NodeBulkUpdate
+from schema.schemas import NodeCreate, NodeUpdate, NodeResponse, NodeBulkUpdate, NodeBase
 from database import supabase
 
 router = APIRouter()
 
-@router.get("/{board_id}/nodes", response_model=List[NodeResponse])
+# Get all nodes for a board
+@router.get("/{board_id}/nodes", response_model=List[NodeBase])
 async def get_board_nodes(board_id: str = Path(..., description="Board ID")):
     """Get all nodes for a board"""
     try:
         result = supabase.table("nodes").select("*").eq("board_id", board_id).execute()
-        return result.data or []
+        return result.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -49,7 +50,7 @@ async def create_node(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{board_id}/nodes/{node_id}", response_model=NodeResponse)
+@router.get("/{board_id}/nodes/{node_id}", response_model=NodeBase)
 async def get_node(
     board_id: str = Path(..., description="Board ID"),
     node_id: str = Path(..., description="Node ID")
@@ -66,7 +67,7 @@ async def get_node(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.patch("/{board_id}/nodes/{node_id}", response_model=NodeResponse)
+@router.patch("/{board_id}/nodes/{node_id}", response_model=NodeBase)
 async def update_node(
     board_id: str = Path(..., description="Board ID"),
     node_id: str = Path(..., description="Node ID"),

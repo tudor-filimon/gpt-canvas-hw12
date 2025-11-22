@@ -73,6 +73,7 @@ class NodeData(BaseModel):
     board_id: Optional[str] = None  # Store as string for React Flow compatibility
 
 
+
 # ---------------------------- Edge Data Schema (what goes inside ReactFlowEdge.data) ----------------------------------#
 
 class EdgeData(BaseModel):
@@ -86,113 +87,52 @@ class EdgeData(BaseModel):
 # ---------------------------- Board Schemas (for database) ----------------------------------#
 
 class BoardBase(BaseModel):
-    id: UUID
+    id: str
     name: str
-
-class BoardUpdate(BaseModel):
-    name: Optional[str] = None
-
 
 # ---------------------------- Database Node Schemas (for Supabase storage) ----------------------------------#
 
 class NodeBase(BaseModel):
     # Database node schema - stores React Flow node data
-    board_id: UUID
-    node_id: str  # React Flow node ID (string)
+    id: str  # React Flow node ID (string)
+    board_id: str
     x: float
     y: float
     width: Optional[float] = None
     height: Optional[float] = None
-    node_type: Optional[str] = "custom"
-    is_root: bool
-    # Store all React Flow data as JSONB
-    data: Dict[str, Any] = Field(default_factory=dict)
-
+    title: Optional[str] = None
+    content: Optional[str] = None
+    role: Optional[str] = None
+    is_root: bool = False
+    is_collapsed: bool = False
+    is_starred: bool = False
+    model: Optional[str] = None
+    temperature: Optional[float] = None
 
 class NodeCreate(NodeBase):
-    pass
-
-class NodeUpdate(BaseModel):
-    node_id: str  # Required - TEXT ID from frontend
-    prompt: Optional[str] = None  # If provided, triggers LLM call
-    temperature: Optional[float] = None  # For LLM call
-    max_tokens: Optional[int] = None  # For LLM call
-    # Regular update fields
-    board_id: Optional[str] = None  # TEXT, not UUID based on your SQL schema
-    x: Optional[float] = None
-    y: Optional[float] = None
-    width: Optional[float] = None
-    height: Optional[float] = None
-    node_type: Optional[str] = None
-    data: Optional[Dict[str, Any]] = None
-
-
-class NodeDelete(BaseModel):
-    node_id: str  # React Flow uses string IDs
-    board_id: Optional[UUID] = None
-
-
-class NodePosition(BaseModel):
-    node_id: str
-    board_id: Optional[UUID] = None
+    id: str  # React Flow node ID (string)
+    board_id: str
     x: float
     y: float
-
-
-class NodeBulkUpdate(BaseModel):
-    nodes: List[NodeUpdate]
-
-
-class NodeResponse(NodeBase):
-    id: UUID  # Database primary key
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
+    width: Optional[float] = None
+    height: Optional[float] = None
+    title: Optional[str] = None
+    content: Optional[str] = None
+    role: Optional[str] = None
+    is_root: bool = False
+    is_collapsed: bool = False
+    is_starred: bool = False
 
 # ---------------------------- Database Edge Schemas (for Supabase storage) ----------------------------------#
 
 class EdgeBase(BaseModel):
     # Database edge schema - stores React Flow edge data
-    board_id: UUID
-    edge_id: str  # React Flow edge ID (string)
-    source: str  # Source node ID (string)
-    target: str  # Target node ID (string)
+    id: str  # React Flow edge ID (string)
+    board_id: str
+    source_node_id: str  # Source node ID (string)
+    target_node_id: str  # Target node ID (string)
     edge_type: Optional[str] = "default"
     label: Optional[str] = None
-    # Store all React Flow edge data as JSONB
-    data: Optional[Dict[str, Any]] = None
-    is_deleted: bool = False
-
-
-class EdgeCreate(EdgeBase):
-    pass
-
-
-class EdgeUpdate(BaseModel):
-    board_id: Optional[UUID] = None
-    source: Optional[str] = None
-    target: Optional[str] = None
-    edge_type: Optional[str] = None
-    label: Optional[str] = None
-    data: Optional[Dict[str, Any]] = None
-    is_deleted: Optional[bool] = None
-
-
-class EdgeDelete(BaseModel):
-    edge_id: str  # React Flow uses string IDs
-    board_id: Optional[UUID] = None
-
-
-class EdgeResponse(EdgeBase):
-    id: UUID  # Database primary key
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 # ============================================================================
 # ---------------------------- Chat Message Schemas ----------------------------------#
