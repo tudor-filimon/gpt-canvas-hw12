@@ -92,7 +92,7 @@ async def update_node(
             llm_request = LLMServiceRequest(
                 node_id=id,
                 prompt=node_data.prompt,
-                context=node_data.context,
+                # context=node_data.context,
             )
             
             llm_response = await llm_service.generate_content(llm_request)
