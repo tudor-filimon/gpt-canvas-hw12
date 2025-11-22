@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Path, Body
 from typing import List, Optional
 from schema.schemas import NodeCreate, NodeBase, NodeUpdate, NodePosition
 from database import supabase
+from services.context_service import update_node_context
 
 router = APIRouter()
 
@@ -89,10 +90,13 @@ async def update_node(
             from services.llm_service import llm_service
             from schema.schemas import LLMServiceRequest
             
+            # **NEW: Build context from parent nodes before LLM call**
+            context = update_node_context(id, board_id)
+            print(f"Built context for node {id}: {context[:100] if context else 'None'}...")  # Debug log
+            
             llm_request = LLMServiceRequest(
                 node_id=id,
                 prompt=node_data.prompt,
-                # context=node_data.context,
             )
             
             llm_response = await llm_service.generate_content(llm_request)
