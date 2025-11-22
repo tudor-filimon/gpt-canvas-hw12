@@ -86,26 +86,11 @@ class EdgeData(BaseModel):
 # ---------------------------- Board Schemas (for database) ----------------------------------#
 
 class BoardBase(BaseModel):
+    id: UUID
     name: str
-    owner_id: Optional[UUID] = None
-
-
-class BoardCreate(BoardBase):
-    pass
-
 
 class BoardUpdate(BaseModel):
     name: Optional[str] = None
-    owner_id: Optional[UUID] = None
-
-
-class BoardResponse(BoardBase):
-    id: UUID
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # ---------------------------- Database Node Schemas (for Supabase storage) ----------------------------------#
@@ -119,6 +104,7 @@ class NodeBase(BaseModel):
     width: Optional[float] = None
     height: Optional[float] = None
     node_type: Optional[str] = "custom"
+    is_root: bool
     # Store all React Flow data as JSONB
     data: Dict[str, Any] = Field(default_factory=dict)
 
@@ -126,9 +112,13 @@ class NodeBase(BaseModel):
 class NodeCreate(NodeBase):
     pass
 
-
 class NodeUpdate(BaseModel):
-    board_id: Optional[UUID] = None
+    node_id: str  # Required - TEXT ID from frontend
+    prompt: Optional[str] = None  # If provided, triggers LLM call
+    temperature: Optional[float] = None  # For LLM call
+    max_tokens: Optional[int] = None  # For LLM call
+    # Regular update fields
+    board_id: Optional[str] = None  # TEXT, not UUID based on your SQL schema
     x: Optional[float] = None
     y: Optional[float] = None
     width: Optional[float] = None
@@ -235,7 +225,7 @@ class ChatMessageResponse(ChatMessageBase):
 class BoardGetResponse(BaseModel):
     # GET /api/boards/:boardId response
     
-    board: BoardResponse
+    board: BoardBase
     nodes: List[ReactFlowNode]  # Return React Flow format
     edges: List[ReactFlowEdge]  # Return React Flow format
 
@@ -355,7 +345,7 @@ class FlowReset(BaseModel):
     flow_id: UUID
 
 
-# ---------------------------- GPT Schemas ----------------------------------#  
+# ---------------------------- GPT Schemas - MIGHT BE REDUNDANT ----------------------------------#  
 class GPTRequest(BaseModel):
     prompt: str
     context: Optional[Dict[str, Any]] = None
@@ -367,3 +357,32 @@ class GPTResponse(BaseModel):
     status: str
     metadata: Optional[Dict[str, Any]] = None
 
+# ---------------------------- LLM Service Schemas (for Gemini API) ----------------------------------#
+class LLMNodeContext(BaseModel):
+    """Context information from a node for LLM processing"""
+    node_id: str
+    title: Optional[str] = None
+    role: Optional[str] = None  # Will be NodeRole enum value as string
+    content: Optional[str] = None
+    model: Optional[str] = None
+    temperature: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class LLMServiceRequest(BaseModel):
+    """Request to generate content using LLM with node context"""
+    node_id: str  # React Flow node ID (string)
+    prompt: str
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    operation_type: Optional[str] = None  # e.g., "enhance", "expand", "summarize"
+
+
+class LLMServiceResponse(BaseModel):
+    """Response from LLM service"""
+    success: bool
+    node_id: str
+    generated_content: Optional[str] = None
+    error: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    timestamp: datetime
