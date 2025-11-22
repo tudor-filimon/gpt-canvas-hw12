@@ -2,24 +2,29 @@ import React, { useState, useEffect } from "react";
 import {
   SquarePen,
   Search,
-  X,
+  MoreVertical,
   Trash2,
+  Pencil,
   PanelLeftClose,
   PanelRightOpen,
 } from "lucide-react";
 
-import { boardAPI, nodeAPI } from '../utils/api';
+import { boardAPI } from '../utils/api';
+import SearchBoardsModal from './SearchBoardsModal';
 
-export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch }) {
+export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch, currentBoardId, colorMode = 'dark' }) {
   const [boards, setBoards] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [boardName, setBoardName] = useState("");
+  const [editingBoardId, setEditingBoardId] = useState(null);
+  const [editingName, setEditingName] = useState("");
+  const [menuOpenId, setMenuOpenId] = useState(null);
 
   // GET ALL BOARDS //
   const getBoards = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/boards/");
-      const data = await response.json();
+      const data = await boardAPI.getBoards();
       console.log("Boards fetched:", data);
       setBoards(data);
     } catch (error) {
@@ -32,6 +37,17 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch }
     getBoards();
   }, []);
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuOpenId && !event.target.closest('.menu-container')) {
+        setMenuOpenId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpenId]);
+
   // CREATE NEW BOARD //
   const createBoard = async () => {
     if (!boardName.trim()) return;
@@ -42,33 +58,12 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch }
       console.log("Board created:", boardData);
       const newBoardId = boardData.id;
 
-      // 2. Create a root node for the new board
-      // Position it at the center of the viewport (you can adjust this)
-      const rootNodeData = {
-        id: `node-${Date.now()}`,
-        board_id: newBoardId,
-        x: 100, // Default position - you can center it based on viewport
-        y: 100,
-        width: 400,
-        height: null, // Auto height
-        title: 'New Chat',
-        prompt: null,
-        role: 'user',
-        is_root: true, // IMPORTANT: Mark as root node
-        is_collapsed: false,
-        is_starred: false,
-        model: 'gemini-pro',
-      };
-
-      const rootNode = await nodeAPI.createNode(newBoardId, rootNodeData);
-      console.log("Root node created:", rootNode);
-
-      // 3. Close modal and refresh board list
+      // 2. Close modal and refresh board list
       setShowModal(false);
       setBoardName("");
       getBoards();
 
-      // 4. Switch to the new board
+      // 3. Switch to the new board
       if (onBoardSwitch) {
         onBoardSwitch(newBoardId);
       }
@@ -77,18 +72,37 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch }
     }
   };
 
+  // RENAME BOARD //
+  const renameBoard = async (boardId) => {
+    if (!editingName.trim()) {
+      setEditingBoardId(null);
+      return;
+    }
+
+    try {
+      await boardAPI.updateBoard(boardId, editingName);
+      getBoards();
+      setEditingBoardId(null);
+      setEditingName("");
+      setMenuOpenId(null);
+    } catch (error) {
+      console.error("Error renaming board:", error);
+    }
+  };
+
   // DELETE BOARD //
   const deleteBoard = async (boardId) => {
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/boards/${boardId}/`,
-        {
-          method: "DELETE",
-        }
-      );
-      const data = await response.json();
-      console.log("Board deleted:", data);
+      await boardAPI.deleteBoard(boardId);
       getBoards();
+      setMenuOpenId(null);
+      // If we deleted the current board, switch to first available board
+      if (boardId === currentBoardId && boards.length > 1) {
+        const remainingBoards = boards.filter(b => b.id !== boardId);
+        if (remainingBoards.length > 0 && onBoardSwitch) {
+          onBoardSwitch(remainingBoards[0].id);
+        }
+      }
     } catch (error) {
       console.error("Error deleting board:", error);
     }
@@ -107,12 +121,26 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch }
     }
   };
 
+  // Handle Enter key in rename input
+  const handleRenameKeyPress = (e, boardId) => {
+    if (e.key === "Enter") {
+      renameBoard(boardId);
+    } else if (e.key === "Escape") {
+      setEditingBoardId(null);
+      setEditingName("");
+      setMenuOpenId(null);
+    }
+  };
+
   // Handle board click to switch
   const handleBoardClick = (boardId) => {
     if (onBoardSwitch) {
       onBoardSwitch(boardId);
     }
   };
+
+  // Get current board name for breadcrumbs
+  const currentBoard = boards.find(b => b.id === currentBoardId);
 
   // COLLAPSED VIEW
   if (isCollapsed) {
@@ -152,6 +180,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch }
 
           {/* Search Button */}
           <button
+            onClick={() => setShowSearchModal(true)}
             className="w-full flex items-center justify-center p-2 rounded-lg text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
             title="Search boards"
           >
@@ -187,11 +216,11 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch }
         </div>
 
         {/* Top Section */}
-        <div className="px-4 space-y-0.5">
+        <div className="space-y-0.5">
           {/* New Board Button */}
           <button
             onClick={handleNewBoard}
-            className="w-full flex items-center gap-2 py-2 rounded-lg text-base text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+            className="w-full flex items-center gap-2 py-2 px-4 rounded-lg text-base text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
           >
             <SquarePen
               size={16}
@@ -201,7 +230,10 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch }
           </button>
 
           {/* Search Button */}
-          <button className="w-full flex items-center gap-2 py-2 rounded-lg text-base text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+          <button 
+            onClick={() => setShowSearchModal(true)}
+            className="w-full flex items-center gap-2 py-2 px-4 rounded-lg text-base text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+          >
             <Search
               size={16}
               className="text-neutral-500 dark:text-neutral-400"
@@ -211,69 +243,132 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onBoardSwitch }
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto pb-2">
+        <div className="flex-1 overflow-y-auto">
           {/* Saved Boards Section */}
-          <div className="px-4 py-2">
-            <div className="text-sm text-neutral-500 dark:text-neutral-500 mb-2">
+          <div className="py-2">
+            <div className="text-sm text-neutral-500 dark:text-neutral-500 mb-2 px-4">
               Saved boards
             </div>
             <ul className="space-y-0.5">
               {boards.map((board) => (
-                <li key={board.id} className="group flex items-center gap-2">
-                  <button
-                    onClick={() => handleBoardClick(board.id)}
-                    className="flex-1 py-1.5 px-2 rounded-lg text-base text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-left"
-                    title={board.name}
-                  >
-                    <span className="truncate block">{board.name}</span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteBoard(board.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/20 transition-all"
-                    title="Delete board"
-                  >
-                    <Trash2 size={14} className="text-red-500" />
-                  </button>
+                <li key={board.id} className="group relative">
+                  {editingBoardId === board.id ? (
+                    // Edit mode
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        onKeyDown={(e) => handleRenameKeyPress(e, board.id)}
+                        onBlur={() => renameBoard(board.id)}
+                        autoFocus
+                        className="flex-1 py-1.5 px-4 rounded-lg text-base text-neutral-900 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  ) : (
+                    // Normal mode
+                    <div className="relative group/item">
+                      <button
+                        onClick={() => handleBoardClick(board.id)}
+                        className={`w-full py-1.5 px-4 rounded-lg text-base text-left transition-colors ${
+                          currentBoardId === board.id
+                            ? 'bg-neutral-200 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-200 font-medium'
+                            : 'text-neutral-900 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                        }`}
+                        title={board.name}
+                      >
+                        <span className="truncate block">{board.name}</span>
+                      </button>
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 menu-container">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenId(menuOpenId === board.id ? null : board.id);
+                          }}
+                          className="opacity-0 group-hover/item:opacity-100 p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all"
+                          title="More options"
+                        >
+                          <MoreVertical size={14} className="text-neutral-500 dark:text-neutral-400" />
+                        </button>
+                        {menuOpenId === board.id && (
+                          <div className="absolute right-0 top-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg z-50 min-w-[120px]">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingBoardId(board.id);
+                                setEditingName(board.name);
+                                setMenuOpenId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                            >
+                              <Pencil size={14} />
+                              <span>Rename</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteBoard(board.id);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            >
+                              <Trash2 size={14} />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
           </div>
         </div>
+
       </aside>
+
+      {/* Search Boards Modal */}
+      <SearchBoardsModal
+        isOpen={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        onBoardSwitch={onBoardSwitch}
+        onCreateBoard={handleNewBoard}
+        currentBoardId={currentBoardId}
+        colorMode={colorMode}
+      />
 
       {/* Create Board Modal */}
       {showModal && (
-        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-neutral-800 rounded-lg p-6 w-96 border border-neutral-700 shadow-xl">
-          <h2 className="text-lg font-semibold text-neutral-200 mb-4">
-            Create New Board
-          </h2>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowModal(false)}>
+          <div className="bg-white dark:bg-neutral-800 rounded-lg p-6 w-96 border border-neutral-200 dark:border-neutral-700 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-200 mb-4">
+              Create New Board
+            </h2>
 
-          <input
-            type="text"
-            value={boardName}
-            onChange={(e) => setBoardName(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder="Enter board name..."
-            autoFocus
-            className="w-full px-3 py-2 mb-4 bg-neutral-700 border border-neutral-600 rounded-lg text-neutral-200 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+            <input
+              type="text"
+              value={boardName}
+              onChange={(e) => setBoardName(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder="Enter board name..."
+              autoFocus
+              className="w-full px-3 py-2 mb-4 bg-white dark:bg-neutral-700 border border-neutral-300 dark:border-neutral-600 rounded-lg text-neutral-900 dark:text-neutral-200 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
 
-          <div className="flex gap-3 justify-end">
-            <button
-              onClick={() => setShowModal(false)}
-              className="px-4 py-2 rounded-lg text-neutral-300 hover:bg-neutral-700 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={createBoard}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium transition-colors"
-            >
-              Create
-            </button>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 rounded-lg text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createBoard}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium transition-colors"
+              >
+                Create
+              </button>
+            </div>
           </div>
         </div>
       )}

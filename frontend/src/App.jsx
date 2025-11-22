@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -29,10 +29,25 @@ function Flow() {
   const [edges, setEdges] = useState([]);
   const [colorMode, setColorMode] = useState('dark');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  
+  // Undo/Redo history
+  const [history, setHistory] = useState([{ nodes: [], edges: [] }]); // Initial state
+  const [historyIndex, setHistoryIndex] = useState(0);
+  
+  // Refs to track latest state for history (avoid stale closures)
+  const nodesRef = useRef([]);
+  const edgesRef = useRef([]);
+  const saveTimeoutRef = useRef(null);
+  const isRestoringHistoryRef = useRef(false);
+  const historyIndexRef = useRef(0);
+  const isAddingConnectedNodeRef = useRef(false); // Flag to prevent duplicate history saves
+  const isAddingFloatingNodeRef = useRef(false); // Flag to prevent duplicate history saves for floating nodes
 
   // ********** NEW CODE HERE **********
   const [boardId, setBoardId] = useState('board-001'); // Default board ID. First one it opens when website opens
-  const [isLoading, setIsLoading] = useState(true);  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [currentBoardName, setCurrentBoardName] = useState(null);  
 
   // Node dimensions (approximate)
   const NODE_WIDTH = 400;
@@ -313,11 +328,64 @@ function Flow() {
     return { x: maxX, y: maxY };
   }, [checkCollision]);
 
+  // Update historyIndexRef when historyIndex changes
+  useEffect(() => {
+    historyIndexRef.current = historyIndex;
+  }, [historyIndex]);
+  
+  // Save state to history (only if not restoring from history)
+  // Define this early so it can be used by other callbacks
+  const saveToHistory = useCallback((newNodes, newEdges, immediate = false) => {
+    if (isRestoringHistoryRef.current) {
+      return; // Don't save history when restoring from history
+    }
+    
+    // Clear existing timeout if not immediate
+    if (saveTimeoutRef.current && !immediate) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    const save = () => {
+      // Use functional updates to get current state
+      setHistory((prevHistory) => {
+        const currentIndex = historyIndexRef.current;
+        // Remove any history after current index (when undoing and then making new changes)
+        const trimmedHistory = prevHistory.slice(0, currentIndex + 1);
+        // Add new state
+        const newHistory = [...trimmedHistory, { 
+          nodes: JSON.parse(JSON.stringify(newNodes)), 
+          edges: JSON.parse(JSON.stringify(newEdges)) 
+        }];
+        // Limit history to last 50 states to prevent memory issues
+        const finalHistory = newHistory.slice(-50);
+        const newIndex = Math.min(currentIndex + 1, finalHistory.length - 1);
+        
+        // Update history index
+        setHistoryIndex(newIndex);
+        historyIndexRef.current = newIndex;
+        
+        return finalHistory;
+      });
+    };
+    
+    if (immediate) {
+      save();
+    } else {
+      saveTimeoutRef.current = setTimeout(save, 300);
+    }
+  }, []);
+
   // Handler for adding a new connected node
   const handleAddConnectedNode = useCallback((sourceNodeId, direction) => {
+    // Set flag to prevent duplicate history saves
+    isAddingConnectedNodeRef.current = true;
+    
     setNodes((currentNodes) => {
       const sourceNode = currentNodes.find(n => n.id === sourceNodeId);
-      if (!sourceNode) return currentNodes;
+      if (!sourceNode) {
+        isAddingConnectedNodeRef.current = false;
+        return currentNodes;
+      }
 
       // Different offsets for vertical vs horizontal directions
       // Node width is ~400px, so horizontal needs more space
@@ -366,12 +434,42 @@ function Flow() {
         sourceHandle: `source-${direction}`, // Correctly reference the unique handle ID
         targetHandle: `target-${getOppositeDirection(direction)}`, // Connect to the opposite target handle
         type: 'default',
+        style: { strokeWidth: 2 }, // Double thickness
       };
 
-      setEdges((eds) => addEdge(newEdge, eds));
-      return currentNodes.concat(newNode);
+      const updatedNodes = currentNodes.concat(newNode);
+      nodesRef.current = updatedNodes;
+      
+      setEdges((eds) => {
+        const updatedEdges = addEdge(newEdge, eds);
+        edgesRef.current = updatedEdges;
+        
+        // Save to history once after both node and edge are added
+        // Use setTimeout with a delay to ensure React Flow has processed all changes
+        setTimeout(() => {
+          saveToHistory(updatedNodes, updatedEdges, true);
+          // Reset flag after a longer delay to ensure all change events are processed
+          setTimeout(() => {
+            isAddingConnectedNodeRef.current = false;
+          }, 100);
+        }, 50);
+        
+        // Fit view to show the new node
+        setTimeout(() => {
+          const nodeWidth = newNode.width || 400;
+          const nodeHeight = newNode.height || 200;
+          setCenter(
+            finalPosition.x + nodeWidth / 2, 
+            finalPosition.y + nodeHeight / 2, 
+            { zoom: 1.2, duration: 400 }
+          );
+        }, 0);
+        
+        return updatedEdges;
+      });
+      return updatedNodes;
     });
-  }, [findEmptySpace, setEdges, boardId]);
+  }, [findEmptySpace, saveToHistory, setCenter, boardId]);
 
   // Helper to get opposite direction for target handle
   const getOppositeDirection = (direction) => {
@@ -392,6 +490,24 @@ function Flow() {
       
       // Call the GET endpoint
       const boardData = await boardAPI.getBoard(boardId);
+      
+      // Get board name from the board data
+      if (boardData.board && boardData.board.name) {
+        setCurrentBoardName(boardData.board.name);
+      } else if (boardData.name) {
+        setCurrentBoardName(boardData.name);
+      } else {
+        // If name not in response, fetch all boards to get the name
+        try {
+          const boards = await boardAPI.getBoards();
+          const board = boards.find(b => b.id === boardId);
+          if (board) {
+            setCurrentBoardName(board.name);
+          }
+        } catch (error) {
+          console.error('Failed to fetch board name:', error);
+        }
+      }
       
       console.log('Board data received:', boardData);
       
@@ -447,8 +563,8 @@ function Flow() {
   }, []);
   
   // Initial Nodes State
-  const [nodes, setNodes] = useState([
-    /*{ 
+  const initialNodes = [
+    { 
       id: 'node-1', 
       type: 'chat', 
       position: { x: 100, y: 100 }, 
@@ -460,7 +576,84 @@ function Flow() {
         onAddNode: handleAddConnectedNode // Inject handler
       } 
     },
-  */]);
+  ];
+  
+  const [nodes, setNodes] = useState(initialNodes);
+  
+  // Update refs when state changes
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+  
+  // Initialize history with initial state
+  useEffect(() => {
+    setHistory([{ nodes: initialNodes, edges: [] }]);
+    setHistoryIndex(0);
+    nodesRef.current = initialNodes;
+    edgesRef.current = [];
+  }, []);
+
+  // Undo function
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      isRestoringHistoryRef.current = true;
+      const newIndex = historyIndex - 1;
+      const state = history[newIndex];
+      if (state) {
+        // Restore nodes with handlers
+        const restoredNodes = JSON.parse(JSON.stringify(state.nodes)).map(node => ({
+          ...node,
+          data: {
+            ...node.data,
+            onAddNode: handleAddConnectedNode
+          }
+        }));
+        setNodes(restoredNodes);
+        setEdges(JSON.parse(JSON.stringify(state.edges)));
+        setHistoryIndex(newIndex);
+        nodesRef.current = restoredNodes;
+        edgesRef.current = JSON.parse(JSON.stringify(state.edges));
+        historyIndexRef.current = newIndex;
+        // Reset flag after a brief delay to allow state updates to complete
+        setTimeout(() => {
+          isRestoringHistoryRef.current = false;
+        }, 100);
+      }
+    }
+  }, [history, historyIndex, handleAddConnectedNode]);
+  
+  // Redo function
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      isRestoringHistoryRef.current = true;
+      const newIndex = historyIndex + 1;
+      const state = history[newIndex];
+      if (state) {
+        // Restore nodes with handlers
+        const restoredNodes = JSON.parse(JSON.stringify(state.nodes)).map(node => ({
+          ...node,
+          data: {
+            ...node.data,
+            onAddNode: handleAddConnectedNode
+          }
+        }));
+        setNodes(restoredNodes);
+        setEdges(JSON.parse(JSON.stringify(state.edges)));
+        setHistoryIndex(newIndex);
+        nodesRef.current = restoredNodes;
+        edgesRef.current = JSON.parse(JSON.stringify(state.edges));
+        historyIndexRef.current = newIndex;
+        // Reset flag after a brief delay to allow state updates to complete
+        setTimeout(() => {
+          isRestoringHistoryRef.current = false;
+        }, 100);
+      }
+    }
+  }, [history, historyIndex, handleAddConnectedNode]);
 
   // Handle dark mode class on html/body
   useEffect(() => {
@@ -482,26 +675,150 @@ function Flow() {
     loadBoardData();
   }, [loadBoardData, boardId]);
 
-  // Global keyboard shortcut: Cmd/Ctrl + F to open search
+  // Global keyboard shortcuts: Cmd/Ctrl + F to open search, Cmd/Ctrl + Z for undo, Cmd/Ctrl + Y for redo
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         e.preventDefault();
         setIsSearchOpen(true);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
+
+  // Helper function to find closest node to a given position
+  const findClosestNode = useCallback((deletedPosition, remainingNodes) => {
+    if (remainingNodes.length === 0) return null;
+    
+    let closestNode = null;
+    let minDistance = Infinity;
+    
+    remainingNodes.forEach(node => {
+      const nodeCenterX = node.position.x + (node.width || 400) / 2;
+      const nodeCenterY = node.position.y + (node.height || 200) / 2;
+      
+      const dx = nodeCenterX - deletedPosition.x;
+      const dy = nodeCenterY - deletedPosition.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestNode = node;
+      }
+    });
+    
+    return closestNode;
   }, []);
 
   const onNodesChange = useCallback(
-    (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
-    [],
+    (changes) => {
+      setNodes((nds) => {
+        const newNodes = applyNodeChanges(changes, nds);
+        nodesRef.current = newNodes;
+        
+        // Check what type of change this is
+        const isAddChange = changes.some(c => c.type === 'add');
+        const isPositionChange = changes.some(c => c.type === 'position' && c.dragging);
+        const isDataChange = changes.some(c => c.type === 'dimensions' || (c.type === 'position' && !c.dragging));
+        const isRemoveChange = changes.some(c => c.type === 'remove');
+        const isSelectChange = changes.some(c => c.type === 'select');
+        
+        // Handle node deletion - jump to closest node
+        // Also prevent deletion of root nodes
+        if (isRemoveChange) {
+          const removedChanges = changes.filter(c => c.type === 'remove');
+          if (removedChanges.length > 0 && nds.length > 0) {
+            // Filter out root nodes from deletion - prevent them from being deleted
+            const validRemovedChanges = removedChanges.filter(rc => {
+              const node = nds.find(n => n.id === rc.id);
+              return node && !node.data?.isRoot;
+            });
+            
+            // If trying to delete root nodes, filter them out
+            if (validRemovedChanges.length < removedChanges.length) {
+              // Some root nodes were attempted to be deleted - prevent it
+              // Return the nodes with root nodes still present
+              const filteredNodes = nds.filter(n => {
+                const isRemoved = removedChanges.some(rc => rc.id === n.id);
+                // Keep the node if it's not being removed, or if it's a root node
+                return !isRemoved || n.data?.isRoot;
+              });
+              return filteredNodes;
+            }
+            
+            // Find the deleted node's position (only if it's not a root node)
+            const deletedNode = nds.find(n => validRemovedChanges.some(rc => rc.id === n.id) && !n.data?.isRoot);
+            if (deletedNode && newNodes.length > 0) {
+              const deletedCenterX = deletedNode.position.x + (deletedNode.width || 400) / 2;
+              const deletedCenterY = deletedNode.position.y + (deletedNode.height || 200) / 2;
+              
+              // Find closest remaining node
+              const closestNode = findClosestNode(
+                { x: deletedCenterX, y: deletedCenterY },
+                newNodes
+              );
+              
+              // Jump to closest node
+              if (closestNode) {
+                setTimeout(() => {
+                  const nodeWidth = closestNode.width || 400;
+                  const nodeHeight = closestNode.height || 200;
+                  setCenter(
+                    closestNode.position.x + nodeWidth / 2,
+                    closestNode.position.y + nodeHeight / 2,
+                    { zoom: 1.2, duration: 400 }
+                  );
+                }, 0);
+              }
+            }
+          }
+        }
+        
+        // Don't save history for 'add' changes if we're programmatically adding nodes
+        // (we'll save once after the node is fully added)
+        if (isAddChange && (isAddingConnectedNodeRef.current || isAddingFloatingNodeRef.current)) {
+          return newNodes;
+        }
+        
+        // For dragging, debounce. For other changes (remove, data, dimensions), save immediately
+        if (isPositionChange) {
+          // Debounce position changes (dragging)
+          saveToHistory(newNodes, edgesRef.current, false);
+        } else if (isDataChange || isRemoveChange) {
+          // Save immediately for data changes, remove
+          saveToHistory(newNodes, edgesRef.current, true);
+        }
+        // Don't save for select changes (just clicking nodes)
+        // Don't save for add changes when programmatically adding (handled above)
+        
+        return newNodes;
+      });
+    },
+    [saveToHistory, findClosestNode, setCenter],
   );
 
   const onEdgesChange = useCallback(
-    (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
-    [],
+    (changes) => {
+      setEdges((eds) => {
+        const newEdges = applyEdgeChanges(changes, eds);
+        edgesRef.current = newEdges;
+        // Don't save history if we're in the middle of adding a connected node
+        // (we'll save once after both node and edge are added)
+        if (!isAddingConnectedNodeRef.current) {
+          // Save immediately for edge changes (add, remove)
+          saveToHistory(nodesRef.current, newEdges, true);
+        }
+        return newEdges;
+      });
+    },
+    [saveToHistory],
   );
 
   // Determine optimal target handle - the side of target node that faces the source
@@ -630,15 +947,31 @@ function Flow() {
           ...params,
           sourceHandle: `source-${optimalSourcePosition}`,
           targetHandle: `target-${optimalTargetPosition}`,
+          style: { strokeWidth: 2 }, // Double thickness
         };
         
-        setEdges((eds) => addEdge(optimizedParams, eds));
+        setEdges((eds) => {
+          const newEdges = addEdge(optimizedParams, eds);
+          edgesRef.current = newEdges;
+          // Save to history immediately for new connections
+          saveToHistory(nodesRef.current, newEdges, true);
+          return newEdges;
+        });
       } else {
         // Fallback to original params if nodes not found
-        setEdges((eds) => addEdge(params, eds));
+        setEdges((eds) => {
+          const newEdges = addEdge({
+            ...params,
+            style: { strokeWidth: 2 }, // Double thickness
+          }, eds);
+          edgesRef.current = newEdges;
+          // Save to history immediately for new connections
+          saveToHistory(nodesRef.current, newEdges, true);
+          return newEdges;
+        });
       }
     },
-    [getNode, getOptimalSourceHandle, getOptimalTargetHandle],
+    [getNode, getOptimalSourceHandle, getOptimalTargetHandle, saveToHistory],
   );
 
   const toggleColorMode = useCallback(() => {
@@ -687,15 +1020,98 @@ function Flow() {
           onAddNode: handleAddConnectedNode // Ensure new manual nodes also have the handler
         },
       };
-      return currentNodes.concat(newNode);
+      const newNodes = currentNodes.concat(newNode);
+      nodesRef.current = newNodes;
+      
+      // Save to history once after node is added
+      // Use setTimeout with a delay to ensure React Flow has processed all changes
+      setTimeout(() => {
+        saveToHistory(newNodes, edgesRef.current, true);
+        // Reset flag after a longer delay to ensure all change events are processed
+        setTimeout(() => {
+          isAddingFloatingNodeRef.current = false;
+        }, 100);
+      }, 50);
+      
+      // Fit view to show the new node
+      setTimeout(() => {
+        const nodeWidth = newNode.width || 400;
+        const nodeHeight = newNode.height || 200;
+        setCenter(
+          finalPosition.x + nodeWidth / 2, 
+          finalPosition.y + nodeHeight / 2, 
+          { zoom: 1.2, duration: 400 }
+        );
+      }, 0);
+      
+      return newNodes;
     });
-  }, [handleAddConnectedNode, findSideWithMostSpace, getViewport, boardId]);
+  }, [handleAddConnectedNode, findSideWithMostSpace, getViewport, saveToHistory, setCenter, boardId]);
 
   const onClear = useCallback(() => {
-    // Keep root nodes, remove all others
-    setNodes((currentNodes) => currentNodes.filter(node => node.data?.isRoot === true));
+    // Clear all nodes except root nodes, and reset root nodes to default state
+    setNodes((currentNodes) => {
+      const rootNodes = currentNodes.filter(node => node.data?.isRoot === true);
+      
+      // Reset root nodes to default state
+      const resetRootNodes = rootNodes.map(node => ({
+        ...node,
+        position: { x: 100, y: 100 }, // Default position
+        data: {
+          ...node.data,
+          messages: [], // Clear messages
+          label: 'New Node', // Reset label
+          model: 'gemini-pro', // Default model
+          isStarred: false, // Reset star
+          isCollapsed: false, // Reset collapse
+          onAddNode: handleAddConnectedNode // Ensure handler is present
+        },
+        width: 400, // Default width
+        height: null, // Default height (auto)
+      }));
+      
+      // If no root nodes exist, create a default one
+      const finalNodes = resetRootNodes.length > 0 ? resetRootNodes : [
+        {
+          id: 'node-1',
+          type: 'chat',
+          position: { x: 100, y: 100 },
+          data: {
+            label: 'New Node',
+            model: 'gemini-pro',
+            messages: [],
+            isRoot: true,
+            onAddNode: handleAddConnectedNode
+          },
+          width: 400,
+          height: null,
+        }
+      ];
+      
+      nodesRef.current = finalNodes;
+      edgesRef.current = [];
+      
+      // Save to history immediately for clear
+      saveToHistory(finalNodes, [], true);
+      
+      // Jump to the root node position
+      setTimeout(() => {
+        const rootNode = finalNodes[0];
+        if (rootNode) {
+          const nodeWidth = rootNode.width || 400;
+          const nodeHeight = rootNode.height || 200;
+          setCenter(
+            rootNode.position.x + nodeWidth / 2,
+            rootNode.position.y + nodeHeight / 2,
+            { zoom: 1.2, duration: 400 }
+          );
+        }
+      }, 0);
+      
+      return finalNodes;
+    });
     setEdges([]);
-  }, []);
+  }, [saveToHistory, setCenter, handleAddConnectedNode]);
 
   const onSearch = useCallback(() => {
     setIsSearchOpen(true);
@@ -716,8 +1132,46 @@ function Flow() {
     }
   }, [getNode, setCenter]);
 
+  // Jump to base/root node with zoom 1.2
+  const jumpToBaseNode = useCallback(() => {
+    const rootNode = nodes.find(node => node.data?.isRoot === true) || nodes[0];
+    if (rootNode) {
+      const nodeWidth = rootNode.width || 400;
+      const nodeHeight = rootNode.height || 200;
+      setCenter(
+        rootNode.position.x + nodeWidth / 2,
+        rootNode.position.y + nodeHeight / 2,
+        { zoom: 1.2, duration: 400 }
+      );
+    }
+  }, [nodes, setCenter]);
+
+  // Set initial viewport to base node with zoom 1.2
+  useEffect(() => {
+    if (initialNodes.length > 0) {
+      const rootNode = initialNodes.find(node => node.data?.isRoot === true) || initialNodes[0];
+      if (rootNode) {
+        const nodeWidth = rootNode.width || 400;
+        const nodeHeight = rootNode.height || 200;
+        setTimeout(() => {
+          setCenter(
+            rootNode.position.x + nodeWidth / 2,
+            rootNode.position.y + nodeHeight / 2,
+            { zoom: 1.2, duration: 0 }
+          );
+        }, 100);
+      }
+    }
+  }, [setCenter]); // Only run on initial mount
+
   return (
-    <Layout onBoardSwitch={switchBoard}>
+    <Layout 
+      onBoardSwitch={switchBoard} 
+      currentBoardId={boardId}
+      isSidebarCollapsed={isSidebarCollapsed}
+      onSidebarCollapseChange={setIsSidebarCollapsed}
+      colorMode={colorMode}
+    >
       {isLoading ? (
         <div className="flex items-center justify-center h-screen">
           <p className="text-neutral-600 dark:text-neutral-400">Loading board...</p>
@@ -727,9 +1181,13 @@ function Flow() {
       <Hotbar 
         onAddNode={onAddNode} 
         onClear={onClear} 
-        onFitView={() => fitView()}
+        onFitView={jumpToBaseNode}
         onSearch={onSearch}
         onToggleTheme={toggleColorMode}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
         colorMode={colorMode}
       />
       <ReactFlow
@@ -739,16 +1197,30 @@ function Flow() {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
-        fitView
+        defaultEdgeOptions={{
+          style: { strokeWidth: 2 }
+        }}
+        defaultViewport={{ x: 0, y: 0, zoom: 1.2 }}
         proOptions={{ hideAttribution: true }}
         colorMode={colorMode}
       >
         <Background />
         <MiniMap />
       </ReactFlow>
-      {/* Floating bn.ai text in corner */}
+      {/* Floating bn.ai text with breadcrumbs */}
       <div className="absolute top-4 left-4 z-10 pointer-events-none">
-        <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-200" style={{ fontFamily: "'Azeret Mono', monospace", fontWeight: 600 }}>bn.ai</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-200" style={{ fontFamily: "'Azeret Mono', monospace", fontWeight: 600 }}>bn.ai</h1>
+          <div className={`flex items-center gap-1 overflow-hidden transition-all duration-300 ${isSidebarCollapsed && currentBoardName ? 'max-w-[500px] opacity-100' : 'max-w-0 opacity-0'}`}>
+            <span className="text-neutral-600 dark:text-neutral-400 whitespace-nowrap" style={{ fontFamily: "'Azeret Mono', monospace" }}>/</span>
+            <span 
+              className="text-sm text-neutral-500 dark:text-neutral-400 whitespace-nowrap"
+              style={{ fontFamily: "'Azeret Mono', monospace", fontWeight: 400 }}
+            >
+              {currentBoardName}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Search Modal */}

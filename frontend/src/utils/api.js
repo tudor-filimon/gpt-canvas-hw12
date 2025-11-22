@@ -37,6 +37,10 @@ export const boardAPI = {
     body: JSON.stringify({ name }),
   }),
   deleteBoard: (boardId) => apiCall(`/boards/${boardId}`, { method: 'DELETE' }), // ADD THIS
+  updateBoard: (boardId, name) => apiCall(`/boards/${boardId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  }),
   // Save nodes and edges (bulk save)
   saveBoard: (boardId, nodes, edges) => apiCall(`/boards/${boardId}/save`, {
     method: 'POST',

@@ -8,7 +8,7 @@ import {
   ChevronDown, 
   ChevronUp,
   Plus,
-  // Pencil, // COMMENTED OUT - no longer editing titles
+  Pencil, // COMMENTED OUT - no longer editing titles
 } from 'lucide-react';
 
 import { nodeAPI } from '../utils/api'; // Connecting to backend
@@ -30,12 +30,15 @@ const ChatMessage = ({ role, content }) => (
 // Helper for the side controls (Handle + Add Button)
 const SideControl = ({ position, isConnectable, onAddNode, isCollapsed }) => {
   // Invisible Hit Area - positioned to just cover the edge and extend outward
+  // Extended to accommodate the sliding button without losing hover
   // When collapsed, the node is shorter, so hit areas adjust accordingly
+  // Top hit area starts below header to avoid conflicts with header buttons
+  // Right hit area starts from top but avoids delete button area in top-right corner
   const hitAreaClasses = {
-    [Position.Top]: '-top-4 left-0 w-full h-8',
-    [Position.Right]: '-right-4 top-0 w-8 h-full',
-    [Position.Bottom]: '-bottom-4 left-0 w-full h-8',
-    [Position.Left]: '-left-4 top-0 w-8 h-full',
+    [Position.Top]: '-top-4 left-0 w-full h-16', // Extended to h-16 (64px) to cover slide-out button
+    [Position.Right]: '-right-4 top-0 w-16 h-full', // Extended to w-16 (64px) to cover slide-out button
+    [Position.Bottom]: '-bottom-4 left-0 w-full h-16', // Extended to h-16 (64px) to cover slide-out button
+    [Position.Left]: '-left-4 top-0 w-16 h-full', // Extended to w-16 (64px) to cover slide-out button
   };
 
   // Get the correct style override for each position to place handle exactly on edge
@@ -46,9 +49,30 @@ const SideControl = ({ position, isConnectable, onAddNode, isCollapsed }) => {
     // To sit on node edge: move from hit area edge (+16px) then center handle (-6px) = +10px
     // Add extra offset to move further inward if React Flow adds its own offset
     const extraOffset = 4; // Additional offset to move handle further inward
-    const outwardOffset = 3; // Move handle 2px outward from edge
-    const topBottomOffset = hitAreaOffset - handleOffset + extraOffset - outwardOffset; // 16 - 7.2 + 4 - 2 = 10.8px
+    const outwardOffset = 3; // Move handle 3px outward from edge
+    const topBottomOffset = hitAreaOffset - handleOffset + extraOffset - outwardOffset; // 16 - 7.2 + 4 - 3 = 9.8px
     const leftRightOffset = hitAreaOffset - handleOffset + extraOffset - outwardOffset; // Same for left/right
+    
+    // When collapsed, the node is shorter, so adjust positioning
+    // For collapsed nodes, position handles relative to the header height instead of 50%
+    if (isCollapsed) {
+      // Header height: py-4 (16px top + 16px bottom = 32px) + content (~20px) = ~52px total
+      // Center point is approximately 26px from top
+      const collapsedCenter = 26;
+      
+      switch (position) {
+        case Position.Top:
+          return { top: `${topBottomOffset}px`, left: '50%', transform: 'translateX(-50%)', position: 'absolute' };
+        case Position.Right:
+          return { right: `${leftRightOffset}px`, top: `${collapsedCenter}px`, transform: 'translateY(-50%)', position: 'absolute' };
+        case Position.Bottom:
+          return { bottom: `${topBottomOffset}px`, left: '50%', transform: 'translateX(-50%)', position: 'absolute' };
+        case Position.Left:
+          return { left: `${leftRightOffset}px`, top: `${collapsedCenter}px`, transform: 'translateY(-50%)', position: 'absolute' };
+        default:
+          return {};
+      }
+    }
     
     switch (position) {
       case Position.Top:
@@ -64,35 +88,43 @@ const SideControl = ({ position, isConnectable, onAddNode, isCollapsed }) => {
     }
   };
 
-  // Plus button positioning - floating above the handle, offset outward from edge
-  // Button is positioned relative to the handle, floating 12px outward
-  const plusButtonClasses = {
-    [Position.Top]: 'top-[-28px] left-1/2 -translate-x-1/2', // Above handle, 12px above edge
-    [Position.Right]: 'right-[-28px] top-1/2 -translate-y-1/2', // To the right of handle, 12px right of edge
-    [Position.Bottom]: 'bottom-[-28px] left-1/2 -translate-x-1/2', // Below handle, 12px below edge
-    [Position.Left]: 'left-[-28px] top-1/2 -translate-y-1/2', // To the left of handle, 12px left of edge
+  // Plus button positioning - starts at handle position, slides out on hover
+  // Button starts at the handle position and slides outward
+  const plusButtonBaseClasses = {
+    [Position.Top]: 'top-0 left-1/2 -translate-x-1/2', // Start at handle position (top edge)
+    [Position.Right]: 'right-0 top-1/2 -translate-y-1/2', // Start at handle position (right edge)
+    [Position.Bottom]: 'bottom-0 left-1/2 -translate-x-1/2', // Start at handle position (bottom edge)
+    [Position.Left]: 'left-0 top-1/2 -translate-y-1/2', // Start at handle position (left edge)
+  };
+
+  // Slide out transforms for each position
+  const slideOutTransforms = {
+    [Position.Top]: 'group-hover/hit:-translate-y-7', // Slide up 28px
+    [Position.Right]: 'group-hover/hit:translate-x-7', // Slide right 28px
+    [Position.Bottom]: 'group-hover/hit:translate-y-7', // Slide down 28px
+    [Position.Left]: 'group-hover/hit:-translate-x-7', // Slide left 28px
   };
 
   return (
-    <div className={`absolute ${hitAreaClasses[position]} z-50 group/hit`}>
+    <div className={`absolute ${hitAreaClasses[position]} z-40 group/hit pointer-events-auto`}>
       {/* Handle - positioned exactly on the edge, directly in the hit area */}
       <Handle 
         type="source" 
         position={position} 
         id={`source-${position}`} 
         isConnectable={isConnectable} 
-        className="!w-[13px] !h-[13px] !bg-neutral-400 !border-2 !border-white dark:!border-neutral-900 hover:!bg-black dark:hover:!bg-white transition-colors opacity-0 group-hover/hit:opacity-100 transition-opacity duration-200" 
+        className="!w-[13px] !h-[13px] !bg-neutral-400 !border-2 !border-white dark:!border-neutral-900 hover:!bg-black dark:hover:!bg-white transition-colors opacity-0 group-hover/hit:opacity-100 transition-opacity duration-200 pointer-events-auto" 
         style={getHandleStyle()}
       />
       
-      {/* Plus Button - floating above handle, offset outward */}
-      <div className={`absolute ${plusButtonClasses[position]} opacity-0 group-hover/hit:opacity-100 transition-opacity duration-200`}>
+      {/* Plus Button - starts at handle, slides out on hover */}
+      <div className={`absolute ${plusButtonBaseClasses[position]} opacity-0 group-hover/hit:opacity-100 transition-all duration-200 ${slideOutTransforms[position]} pointer-events-auto`}>
         <button 
           onClick={(e) => {
             e.stopPropagation();
             onAddNode(position);
           }}
-          className="p-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-full text-neutral-500 hover:text-black dark:hover:text-white hover:border-black dark:hover:border-white shadow-sm transition-all transform hover:scale-110"
+          className="p-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-full text-neutral-500 hover:text-black dark:hover:text-white hover:border-black dark:hover:border-white shadow-sm transition-all transform hover:scale-110 pointer-events-auto"
           title="Add Connected Node"
         >
           <Plus size={12} strokeWidth={3} />
@@ -123,14 +155,14 @@ export default function ChatNode({ data, id, isConnectable }) {
   const isRoot = data.isRoot || false;
   
   // Title editing state - COMMENTED OUT FOR NOW
-  // const [isEditingTitle, setIsEditingTitle] = useState(false);
-  // const [title, setTitle] = useState(data.label || "New Node");
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [title, setTitle] = useState(data.label || "New Node");
   
   // Use node ID as the title (will be replaced with board ID from database)
-  const title = id; // For now, use node ID. Later: data.boardId or similar
+  // const title = id; // For now, use node ID. Later: data.boardId or similar
   
   const textareaRef = useRef(null);
-  // const titleInputRef = useRef(null); // COMMENTED OUT - no longer editing titles
+  const titleInputRef = useRef(null); // ENABLED
   const resizeHandleRef = useRef(null);
   const nodeContainerRef = useRef(null);
   const { deleteElements, updateNode } = useReactFlow();
@@ -154,12 +186,12 @@ export default function ChatNode({ data, id, isConnectable }) {
     }
   }, [input]);
 
-  // Focus title input when editing starts - COMMENTED OUT
-  // useEffect(() => {
-  //   if (isEditingTitle && titleInputRef.current) {
-  //     titleInputRef.current.focus();
-  //   }
-  // }, [isEditingTitle]);
+  // Focus title input when editing starts - ENABLED
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+    }
+  }, [isEditingTitle]);
 
   // ********** NEW CODE HERE **********
   const handleSend = useCallback(async () => {
@@ -232,7 +264,29 @@ export default function ChatNode({ data, id, isConnectable }) {
   //   setIsEditingTitle(false);
   //   // Here you would typically notify parent to update node data
   // };
-
+  const handleTitleSubmit = useCallback(async () => {
+    setIsEditingTitle(false);
+    
+    // Update the node data in React Flow
+    updateNode(id, {
+      data: {
+        ...data,
+        label: title,
+      },
+    });
+    
+    // Update the database via API
+    try {
+      const boardId = data.boardId || 'board-001';
+      await nodeAPI.updateNode(boardId, id, {
+        title: title,
+      });
+    } catch (error) {
+      console.error('Failed to update title:', error);
+      // Optionally revert the title on error
+      setTitle(data.label || "New Node");
+    }
+  }, [title, id, data, updateNode]);
   // Resize handlers - supports both width and height
   const handleResizeStart = useCallback((e) => {
     e.preventDefault();
@@ -241,15 +295,11 @@ export default function ChatNode({ data, id, isConnectable }) {
     setIsResizing(true);
     const startX = e.clientX;
     const startY = e.clientY;
-    // Get actual element dimensions instead of using state values (which might be null)
-    const actualWidth = nodeContainerRef.current 
-      ? nodeContainerRef.current.offsetWidth 
-      : (nodeWidth || 400);
-    const actualHeight = nodeContainerRef.current 
-      ? nodeContainerRef.current.offsetHeight 
-      : (nodeHeight || 200);
-    const startWidth = actualWidth;
-    const startHeight = actualHeight;
+    // Use the current state values to match what React Flow has
+    // This ensures seamless transition - no snapping
+    // Default to 400px width and 200px height if not set (matching default node size)
+    const startWidth = nodeWidth || 400;
+    const startHeight = nodeHeight || 200;
 
     const handleMouseMove = (e) => {
       e.preventDefault();
@@ -291,7 +341,11 @@ export default function ChatNode({ data, id, isConnectable }) {
       style={{ 
         ...(nodeWidth && { width: `${nodeWidth}px` }),
         // Only apply height when not collapsed - when collapsed, let it be auto (just header height)
-        ...(nodeHeight && !isCollapsed && { height: `${nodeHeight}px` })
+        ...(nodeHeight && !isCollapsed && { height: `${nodeHeight}px` }),
+        // Ensure minimum width to prevent controls from overlapping
+        minWidth: '450px',
+        // Ensure minimum height when not collapsed to prevent shrinking during text editing
+        ...(!isCollapsed && { minHeight: '200px' })
       }}
     >
       
@@ -307,16 +361,18 @@ export default function ChatNode({ data, id, isConnectable }) {
       <SideControl position={Position.Bottom} isConnectable={isConnectable} onAddNode={handleAddNode} isCollapsed={isCollapsed} />
       <SideControl position={Position.Left} isConnectable={isConnectable} onAddNode={handleAddNode} isCollapsed={isCollapsed} />
 
-      {/* Delete Button - Only visible when hovering this specific corner area */}
-      <div className="absolute -top-4 -right-4 w-12 h-12 z-50 flex items-center justify-center group/delete">
-        <button 
-          onClick={handleDelete}
-          className="p-2 bg-red-500 text-white rounded-full shadow-md opacity-0 group-hover/delete:opacity-100 transition-all duration-200 hover:scale-110"
-          title="Delete Node"
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
+      {/* Delete Button - Only visible when hovering this specific corner area, hidden for root nodes */}
+      {!isRoot && (
+        <div className="absolute -top-4 -right-4 w-12 h-12 z-[60] flex items-center justify-center group/delete pointer-events-auto">
+          <button 
+            onClick={handleDelete}
+            className="p-2 bg-red-500 text-white rounded-full shadow-md opacity-0 group-hover/delete:opacity-100 transition-all duration-200 hover:scale-110"
+            title="Delete Node"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Resize Handle - Bottom Right Corner with dedicated hit area */}
       {/* When collapsed, make hit area smaller to avoid overlapping with collapse button */}
@@ -350,23 +406,31 @@ export default function ChatNode({ data, id, isConnectable }) {
       </div>
 
       {/* Header */}
-      <div className={`drag-handle px-5 py-4 flex items-center justify-between ${isCollapsed ? 'rounded-b-[2rem]' : ''} cursor-grab active:cursor-grabbing`}>
+      <div className={`drag-handle px-5 py-4 flex items-center justify-between ${isCollapsed ? 'rounded-b-[2rem]' : ''} cursor-grab active:cursor-grabbing relative z-50`}>
         <div className="flex items-center gap-2">
           <GripVertical size={16} className="text-neutral-400" />
           
-          {/* Title - Non-editable, using node ID (will be board ID from database) */}
-          {/* {isEditingTitle ? (
+          {/* Title - Editable */}
+          {isEditingTitle ? (
             <input
               ref={titleInputRef}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={handleTitleSubmit}
-              onKeyDown={(e) => e.key === 'Enter' && handleTitleSubmit()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleTitleSubmit();
+                } else if (e.key === 'Escape') {
+                  setIsEditingTitle(false);
+                  setTitle(data.label || "New Node");
+                }
+              }}
               className="bg-neutral-100 dark:bg-neutral-800 font-medium text-neutral-900 dark:text-neutral-100 text-sm rounded-full px-3 py-1 focus:outline-none max-w-[150px]"
             />
           ) : (
             <div 
-              className="flex items-center gap-2 cursor-pointer"
+              className="flex items-center gap-2 cursor-pointer group/title"
               onClick={() => setIsEditingTitle(true)}
             >
               <span className="font-medium text-neutral-700 dark:text-neutral-200 text-sm max-w-[150px] truncate select-none">
@@ -374,12 +438,7 @@ export default function ChatNode({ data, id, isConnectable }) {
               </span>
               <Pencil size={12} className="text-neutral-400 opacity-0 group-hover/title:opacity-100 transition-opacity" />
             </div>
-          )} */}
-          <span 
-            className="text-neutral-500 dark:text-neutral-500 text-sm max-w-[150px] truncate select-none font-mono"
-          >
-            {title}
-          </span>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
@@ -414,9 +473,9 @@ export default function ChatNode({ data, id, isConnectable }) {
 
       {/* Content Area */}
       {!isCollapsed && (
-        <div className={`flex flex-col ${nodeHeight ? 'flex-1 min-h-0' : ''}`}>
+        <div className="flex flex-col flex-1 min-h-0">
           {(messages.length > 0) && (
-            <div className={`p-5 ${nodeHeight ? 'flex-1 overflow-y-auto min-h-0' : ''} custom-scrollbar`}>
+            <div className="p-5 flex-1 overflow-y-auto min-h-0 custom-scrollbar">
               {messages.map((msg, idx) => (
                 <ChatMessage key={idx} role={msg.role} content={msg.content} />
               ))}
