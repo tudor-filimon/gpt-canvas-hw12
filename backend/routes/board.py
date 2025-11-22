@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Path
 from typing import List
-from schema.schemas import BoardBase, BoardUpdate
+from schema.schemas import BoardBase
 from database import supabase
 import uuid
 
@@ -23,7 +23,7 @@ async def list_boards():
     """List all boards"""
     try:
         result = supabase.table("boards").select("*").execute()
-        return result.data or []
+        return result.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -70,7 +70,7 @@ async def get_board(board_id: str = Path(..., description="Board ID")):
 @router.patch("/{board_id}", response_model=BoardBase)
 async def update_board(
     board_id: str = Path(..., description="Board ID"),
-    board_data: BoardUpdate = None
+    board_data: BoardBase = None
 ):
     """Update board name"""
     try:

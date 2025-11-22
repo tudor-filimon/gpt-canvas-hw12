@@ -1,24 +1,25 @@
 from fastapi import APIRouter, HTTPException, Path
 from typing import List
-from schema.schemas import EdgeCreate, EdgeUpdate, EdgeResponse
+from schema.schemas import EdgeBase
 from database import supabase
 
 router = APIRouter()
 
-@router.get("/{board_id}/edges", response_model=List[EdgeResponse])
+# Get all edge for a board
+@router.get("/{board_id}/edges", response_model=List[EdgeBase])
 async def get_board_edges(board_id: str = Path(..., description="Board ID")):
     """Get all edges for a board"""
     try:
-        result = supabase.table("edges").select("*").eq("board_id", board_id).eq("is_deleted", False).execute()
-        return result.data or []
+        result = supabase.table("edges").select("*").eq("board_id", board_id).execute()
+        return result.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@router.post("/{board_id}/edges", response_model=EdgeResponse)
+# Create an edge in a board
+@router.post("/{board_id}/edges", response_model=EdgeBase)
 async def create_edge(
     board_id: str = Path(..., description="Board ID"),
-    edge_data: EdgeCreate = None
+    edge_data: EdgeBase = None
 ):
     """Create an edge in this board"""
     try:
@@ -27,13 +28,12 @@ async def create_edge(
             raise HTTPException(status_code=404, detail="Board not found")
         
         insert_data = {
-            "id": edge_data.edge_id,
-            "board_id": board_id,
-            "source_node_id": edge_data.source,
-            "target_node_id": edge_data.target,
+            "id": edge_data.id,
+            "board_id": edge_data.board_id,
+            "source_node_id": edge_data.source_node_id,
+            "target_node_id": edge_data.target_node_id,
             "edge_type": edge_data.edge_type or "default",
             "label": edge_data.label,
-            "is_deleted": False
         }
         
         result = supabase.table("edges").insert(insert_data).execute()
@@ -45,8 +45,8 @@ async def create_edge(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@router.get("/{board_id}/edges/{edge_id}", response_model=EdgeResponse)
+# Get a specific edge
+@router.get("/{board_id}/edges/{edge_id}", response_model=EdgeBase)
 async def get_edge(
     board_id: str = Path(..., description="Board ID"),
     edge_id: str = Path(..., description="Edge ID")
@@ -62,12 +62,12 @@ async def get_edge(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@router.patch("/{board_id}/edges/{edge_id}", response_model=EdgeResponse)
+# Update an edge
+@router.patch("/{board_id}/edges/{edge_id}", response_model=EdgeBase)
 async def update_edge(
     board_id: str = Path(..., description="Board ID"),
     edge_id: str = Path(..., description="Edge ID"),
-    edge_data: EdgeUpdate = None
+    edge_data: EdgeBase = None
 ):
     """Update an edge"""
     try:
@@ -76,18 +76,15 @@ async def update_edge(
             raise HTTPException(status_code=404, detail="Edge not found in this board")
         
         update_data = {}
-        if edge_data.source is not None:
-            update_data["source_node_id"] = edge_data.source
-        if edge_data.target is not None:
-            update_data["target_node_id"] = edge_data.target
+        if edge_data.source_node_id is not None:
+            update_data["source_node_id"] = edge_data.source_node_id
+        if edge_data.target_node_id is not None:
+            update_data["target_node_id"] = edge_data.target_node_id
         if edge_data.edge_type is not None:
             update_data["edge_type"] = edge_data.edge_type
         if edge_data.label is not None:
             update_data["label"] = edge_data.label
-        if edge_data.is_deleted is not None:
-            update_data["is_deleted"] = edge_data.is_deleted
-        if edge_data.data is not None:
-            update_data["data"] = edge_data.data
+        
         
         if not update_data:
             return check.data[0]

@@ -17,8 +17,8 @@ class LLMService:
             raise ValueError("GEMINI_API_KEY must be set in environment variables")
         self.client = genai.Client(api_key=api_key)  # Pass API key here
         self.default_model = "gemini-2.5-flash-lite"
-        self.default_temperature = 0.2
-        self.default_max_tokens = 2048
+        self.default_temperature = 0.5
+        self.default_max_tokens = 1024
         
     def _get_node_context(self, node_id: str) -> Optional[LLMNodeContext]:
         """Fetch node data from database to use as context"""
@@ -35,7 +35,7 @@ class LLMService:
                     node_id=node_id,
                     title=node.get("title"),
                     role=node.get("role"),
-                    content=node.get("content"),
+                    prompt=node.get("prompt"),  # CHANGED: was content, now prompt (from database)
                     model=node.get("model"),
                     temperature=node.get("temperature"),
                     metadata=node.get("metadata")
@@ -58,8 +58,8 @@ class LLMService:
                 context_text += f"- Title: {node_context.title}\n"
             if node_context.role:
                 context_text += f"- Role: {node_context.role}\n"
-            if node_context.content:
-                context_text += f"- Content: {node_context.content}\n"
+            if node_context.prompt:  # This is now the prompt from the node
+                context_text += f"- Prompt: {node_context.prompt}\n"
             prompt_parts.append(context_text)
             prompt_parts.append("\n---\n\n")
 
