@@ -212,7 +212,8 @@ async def bulk_update_nodes(
             if node_update.prompt is not None:
                 update_data["prompt"] = node_update.prompt
             if node_update.response is not None:
-                update_data["response"] = node_update.response            if node_update.context is not None:  # NEW
+                update_data["response"] = node_update.response            
+            if node_update.context is not None:  # NEW
                 update_data["context"] = node_update.context
             if node_update.role is not None:
                 update_data["role"] = node_update.role
