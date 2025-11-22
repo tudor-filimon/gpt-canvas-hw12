@@ -26,7 +26,8 @@ CREATE TABLE nodes (
     
     -- Content / behavior
     title TEXT, -- nodeChatTitle
-    content TEXT, -- main text (latest message / summary)
+    prompt TEXT, -- CHANGED: was content (user input / prompt)
+    response TEXT, -- NEW: Gemini generated response
     role TEXT NOT NULL CHECK (role IN ('system', 'user', 'assistant')),
     is_root BOOLEAN DEFAULT FALSE,
     is_collapsed BOOLEAN DEFAULT FALSE,
@@ -36,7 +37,7 @@ CREATE TABLE nodes (
     color TEXT, -- node colour / tree colour
     icon TEXT,
     model TEXT, -- e.g. gpt-4.1, gemini-2.0-flash-exp, etc.
-    temperature FLOAT,
+    -- REMOVED: temperature FLOAT (using constant default in LLM service)
     metadata JSONB DEFAULT '{}'::jsonb -- extra stuff (kept as JSONB for flexibility)
 );
 
@@ -114,7 +115,8 @@ RETURNS TABLE (
     node_x FLOAT,
     node_y FLOAT,
     node_title TEXT,
-    node_content TEXT,
+    node_prompt TEXT,  -- CHANGED: was node_content
+    node_response TEXT,  -- NEW
     node_role TEXT,
     chat_content TEXT,
     chat_role TEXT
@@ -126,7 +128,8 @@ BEGIN
         n.x,
         n.y,
         n.title,
-        n.content,
+        n.prompt,  -- CHANGED: was n.content
+        n.response,  -- NEW
         n.role,
         cm.content,
         cm.role

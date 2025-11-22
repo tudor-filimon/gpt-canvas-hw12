@@ -68,7 +68,6 @@ class NodeData(BaseModel):
     color: Optional[str] = None  # Node colour / tree colour
     icon: Optional[str] = None
     model: Optional[str] = None  # AI model e.g. gpt-4, gemini-pro, etc.
-    temperature: Optional[float] = None
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
     board_id: Optional[str] = None  # Store as string for React Flow compatibility
 
@@ -101,13 +100,13 @@ class NodeBase(BaseModel):
     width: Optional[float] = None
     height: Optional[float] = None
     title: Optional[str] = None
-    content: Optional[str] = None
+    prompt: Optional[str] = None  # CHANGED: was content (user input)
+    response: Optional[str] = None  # NEW: Gemini generated content
     role: Optional[str] = None
     is_root: bool = False
     is_collapsed: bool = False
     is_starred: bool = False
     model: Optional[str] = None
-    temperature: Optional[float] = None
 
 class NodeCreate(NodeBase):
     id: str  # React Flow node ID (string)
@@ -117,11 +116,29 @@ class NodeCreate(NodeBase):
     width: Optional[float] = None
     height: Optional[float] = None
     title: Optional[str] = None
-    content: Optional[str] = None
+    prompt: Optional[str] = None
     role: Optional[str] = None
     is_root: bool = False
     is_collapsed: bool = False
     is_starred: bool = False
+
+# Add this after NodeCreate (around line 124)
+class NodeUpdate(BaseModel):
+    # All fields optional for updates
+    id: Optional[str] = None  # Not used in updates
+    board_id: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+    width: Optional[float] = None
+    height: Optional[float] = None
+    title: Optional[str] = None
+    prompt: Optional[str] = None  # User input / prompt
+    response: Optional[str] = None  # ADD: Gemini generated response
+    role: Optional[str] = None
+    is_root: Optional[bool] = None
+    is_collapsed: Optional[bool] = None
+    is_starred: Optional[bool] = None
+    model: Optional[str] = None
 
 # ---------------------------- Database Edge Schemas (for Supabase storage) ----------------------------------#
 
@@ -143,7 +160,6 @@ class ChatMessageBase(BaseModel):
     role: NodeRole
     content: str
     model: Optional[str] = None
-    temperature: Optional[float] = None
     meta: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
@@ -190,7 +206,6 @@ class ChatMessageDTO(BaseModel):
     role: NodeRole
     content: str
     model: Optional[str] = None
-    temperature: Optional[float] = None
 
 
 class ChatMessagesResponse(BaseModel):
@@ -303,9 +318,8 @@ class LLMNodeContext(BaseModel):
     node_id: str
     title: Optional[str] = None
     role: Optional[str] = None  # Will be NodeRole enum value as string
-    content: Optional[str] = None
+    prompt: Optional[str] = None  # CHANGED: was content
     model: Optional[str] = None
-    temperature: Optional[float] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -313,8 +327,6 @@ class LLMServiceRequest(BaseModel):
     """Request to generate content using LLM with node context"""
     node_id: str  # React Flow node ID (string)
     prompt: str
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
     operation_type: Optional[str] = None  # e.g., "enhance", "expand", "summarize"
 
 
