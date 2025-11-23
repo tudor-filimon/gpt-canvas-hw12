@@ -44,7 +44,11 @@ function Flow() {
   const [boardId, setBoardId] = useState("board-001"); // Default board ID. First one it opens when website opens
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingFading, setIsLoadingFading] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // Load sidebar collapse state from localStorage, default to false if not found
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    const savedSidebarState = localStorage.getItem("isSidebarCollapsed");
+    return savedSidebarState === "true";
+  });
   const [currentBoardName, setCurrentBoardName] = useState(null);
 
   // NEW: Track number of other users online
@@ -810,6 +814,11 @@ function Flow() {
   useEffect(() => {
     localStorage.setItem("colorMode", colorMode);
   }, [colorMode]);
+
+  // Save sidebar collapse state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("isSidebarCollapsed", isSidebarCollapsed.toString());
+  }, [isSidebarCollapsed]);
 
   // ********** NEW CODE HERE **********
   // Load board data on initial mount
