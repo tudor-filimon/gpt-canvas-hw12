@@ -1,4 +1,4 @@
-from typing import Dict, Set
+from typing import Dict, Set, Optional
 from fastapi import WebSocket
 import json
 
@@ -19,6 +19,9 @@ class ConnectionManager:
         
         # Dictionary mapping WebSocket → user info (optional, for showing who's online)
         self.connection_users: Dict[WebSocket, dict] = {}
+        
+        # NEW: Dictionary mapping WebSocket → user_id (for cursor cleanup)
+        self.connection_user_ids: Dict[WebSocket, str] = {}
     
     async def connect(self, websocket: WebSocket, board_id: str, user_info: dict = None):
         """
@@ -42,27 +45,52 @@ class ConnectionManager:
         if user_info:
             self.connection_users[websocket] = user_info
         
+        current_count = len(self.active_connections[board_id])
+        print(f"User connected to board {board_id}. Total users: {current_count}")
+        
+        # IMPORTANT: Send initial user count to the newly connected client
+        try:
+            await websocket.send_json({
+                "type": "user_count_update",
+                "board_id": board_id,
+                "user_count": current_count
+            })
+        except Exception as e:
+            print(f"Error sending initial user count to new client: {e}")
+            # If we can't send, connection is likely dead - remove it
+            self.disconnect(websocket)
+            raise
+        
         # Notify others in the room that someone joined
         await self.broadcast_to_room(
             board_id,
             {
                 "type": "user_joined",
                 "board_id": board_id,
-                "user_count": len(self.active_connections[board_id])
+                "user_count": current_count
             },
             exclude=websocket  # Don't send to the person who just joined
         )
-        
-        print(f"User connected to board {board_id}. Total users: {len(self.active_connections[board_id])}")
+    
+    def set_user_id(self, websocket: WebSocket, user_id: str):
+        """Store the user_id for a WebSocket connection (from cursor_moved messages)."""
+        if websocket in self.connection_boards:
+            self.connection_user_ids[websocket] = user_id
+    
+    def get_user_id(self, websocket: WebSocket) -> Optional[str]:
+        """Get the user_id for a WebSocket connection."""
+        return self.connection_user_ids.get(websocket)
     
     def disconnect(self, websocket: WebSocket):
         """
         Remove a WebSocket connection from its room.
+        Returns the user_id if one was associated with this connection.
         """
         if websocket not in self.connection_boards:
-            return
+            return None
         
         board_id = self.connection_boards[websocket]
+        user_id = self.connection_user_ids.get(websocket)
         
         # Remove from the room
         if board_id in self.active_connections:
@@ -75,8 +103,10 @@ class ConnectionManager:
         # Clean up tracking dictionaries
         self.connection_boards.pop(websocket, None)
         self.connection_users.pop(websocket, None)
+        self.connection_user_ids.pop(websocket, None)
         
         print(f"User disconnected from board {board_id}")
+        return user_id
     
     async def send_personal_message(self, message: dict, websocket: WebSocket):
         """

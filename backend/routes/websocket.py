@@ -37,14 +37,23 @@ async def websocket_endpoint(websocket: WebSocket, board_id: str):
     try:
         # Keep connection alive and listen for messages
         while True:
-            # Wait for a message from the client
-            # FastAPI's WebSocket has receive_text() and receive_json() methods
-            data = await websocket.receive_text()
+            try:
+                data = await websocket.receive_text()
+            except WebSocketDisconnect:
+                # Normal disconnect - break out of loop
+                break
+            except Exception as e:
+                # Connection error - connection is dead
+                print(f"Connection error: {e}")
+                break
             
             try:
-                # Parse the JSON message
                 message = json.loads(data)
                 message_type = message.get("type")
+                
+                # Handle explicit disconnect message
+                if message_type == "disconnect":
+                    break
                 
                 # Handle different message types
                 if message_type == "node_moved":
@@ -83,24 +92,51 @@ async def websocket_endpoint(websocket: WebSocket, board_id: str):
             
             except Exception as e:
                 print(f"Error handling message: {e}")
-                await manager.send_personal_message({
-                    "type": "error",
-                    "message": str(e)
-                }, websocket)
+                try:
+                    await manager.send_personal_message({
+                        "type": "error",
+                        "message": str(e)
+                    }, websocket)
+                except:
+                    # Connection is dead, break out
+                    break
     
-    except WebSocketDisconnect:
-        # User disconnected (closed browser, navigated away, etc.)
-        manager.disconnect(websocket)
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+    finally:
+        # Always clean up on disconnect (whether normal or error)
+        user_id = manager.disconnect(websocket)
+        
+        # If we have a user_id for this connection, broadcast cursor removal
+        if user_id:
+            try:
+                await manager.broadcast_to_room(
+                    board_id,
+                    {
+                        "type": "cursor_moved",
+                        "cursor_data": {
+                            "user_id": user_id,
+                            "x": None,
+                            "y": None,
+                            "timestamp": None
+                        }
+                    }
+                )
+            except Exception as e:
+                print(f"Error broadcasting cursor removal: {e}")
         
         # Notify others that someone left
-        await manager.broadcast_to_room(
-            board_id,
-            {
-                "type": "user_left",
-                "board_id": board_id,
-                "user_count": manager.get_room_size(board_id)
-            }
-        )
+        try:
+            await manager.broadcast_to_room(
+                board_id,
+                {
+                    "type": "user_left",
+                    "board_id": board_id,
+                    "user_count": manager.get_room_size(board_id)
+                }
+            )
+        except Exception as e:
+            print(f"Error broadcasting user_left: {e}")
 
 
 # ============================================================================
@@ -237,6 +273,11 @@ async def handle_cursor_moved(board_id: str, message: dict, sender_websocket: We
     
     if not cursor_data:
         return
+    
+    # Store the user_id for this WebSocket connection (for cleanup on disconnect)
+    user_id = cursor_data.get("user_id")
+    if user_id:
+        manager.set_user_id(sender_websocket, user_id)
     
     # Broadcast to all other users (so they can see this user's cursor)
     await manager.broadcast_to_room(

@@ -43,8 +43,22 @@ function Flow() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [currentBoardName, setCurrentBoardName] = useState(null);
 
-  // Collaborative cursors state
-  const [otherUsersCursors, setOtherUsersCursors] = useState(new Map());
+  // NEW: Track number of other users online
+  const [otherUsersCount, setOtherUsersCount] = useState(0);
+
+  // Create a ref to store sendMessage (will be set after useWebSocket)
+  const sendMessageRef = useRef(null);
+
+  // Get cursor state and handlers from the hook (MUST BE BEFORE useWebSocket)
+  // Pass a wrapper function that uses the ref
+  const { otherUsersCursors, getColorForUser, handleCursorMoved } = useCollaborativeCursors(
+    boardId, 
+    (message) => {
+      if (sendMessageRef.current) {
+        sendMessageRef.current(message);
+      }
+    }
+  );
 
   // ********** WEBSOCKET INTEGRATION - ADD THIS **********
   const { sendMessage, isConnected } = useWebSocket(boardId, {
@@ -124,10 +138,15 @@ function Flow() {
     // Handle user join/leave events
     onUserJoined: useCallback((message) => {
       console.log("User joined board:", message.user_count, "users online");
+      // Update the count of other users (total - 1 for yourself)
+      // message.user_count is total users, so others = total - 1
+      setOtherUsersCount(message.user_count - 1);
     }, []),
 
     onUserLeft: useCallback((message) => {
       console.log("User left board:", message.user_count, "users online");
+      // Update the count of other users (total - 1 for yourself)
+      setOtherUsersCount(message.user_count - 1);
     }, []),
 
     // Error handling
@@ -137,26 +156,15 @@ function Flow() {
 
     // Handle incoming cursor updates from other users
     onCursorMoved: useCallback((message) => {
-      const cursorData = message.cursor_data;
-      if (!cursorData || !cursorData.user_id) return;
-
-      setOtherUsersCursors((prev) => {
-        const newMap = new Map(prev);
-        if (cursorData.x === null || cursorData.y === null) {
-          newMap.delete(cursorData.user_id);
-        } else {
-          newMap.set(cursorData.user_id, {
-            x: cursorData.x,
-            y: cursorData.y,
-            timestamp: cursorData.timestamp || Date.now(),
-          });
-        }
-        return newMap;
-      });
-    }, []),
+      handleCursorMoved(message);
+    }, [handleCursorMoved]),
   });
 
-  const { getColorForUser } = useCollaborativeCursors(boardId, sendMessage);
+  // Update the ref when sendMessage changes
+  useEffect(() => {
+    sendMessageRef.current = sendMessage;
+  }, [sendMessage]);
+
   // Node dimensions (approximate)
   const NODE_WIDTH = 400;
   const NODE_HEIGHT = 200;
@@ -1280,13 +1288,18 @@ function Flow() {
               // Convert flow coordinates to screen coordinates (relative to pane)
               const screenPosition = flowToScreenPosition({ x: cursor.x, y: cursor.y });
               
+              // Get the pane element to ensure correct positioning context
+              const paneElement = document.querySelector('.react-flow__pane');
+              const paneRect = paneElement?.getBoundingClientRect();
+              
               return (
                 <div
                   key={userId}
                   className="absolute pointer-events-none z-50"
                   style={{
-                    left: `${screenPosition.x}px`,
-                    top: `${screenPosition.y}px`,
+                    // If pane exists, position relative to it; otherwise use screenPosition directly
+                    left: paneRect ? `${screenPosition.x}px` : `${screenPosition.x}px`,
+                    top: paneRect ? `${screenPosition.y}px` : `${screenPosition.y}px`,
                     transform: "translate(-50%, -50%)",
                   }}
                 >
@@ -1333,7 +1346,7 @@ function Flow() {
             {/* Connection status */}
             {isConnected && (
               <div className="text-xs mt-1 font-mono text-green-500">
-                ● Connected ({otherUsersCursors.size} others online)
+                ● Connected ({otherUsersCount} {otherUsersCount === 1 ? 'other' : 'others'} online)
               </div>
             )}
             {!isConnected && (

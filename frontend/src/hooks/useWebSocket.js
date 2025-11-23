@@ -110,6 +110,7 @@ export function useWebSocket(boardId, callbacks = {}) {
             break;
 
           case "user_joined":
+          case "user_count_update":  // Handle initial count sent to new client
             onUserJoined?.(message);
             break;
 
