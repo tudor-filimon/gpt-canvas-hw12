@@ -154,15 +154,19 @@ const SideControl = ({ position, isConnectable, onAddNode, isCollapsed }) => {
       className={`absolute ${hitAreaClasses[position]} z-40 group/hit`}
       style={{ pointerEvents: 'none' }}
     >
-      {/* Hover detection area - small zone around handle for hover, doesn't block text selection elsewhere */}
+      {/* Hover detection area - only on outer edge, doesn't extend into content area */}
       <div 
         className="absolute cursor-pointer"
         style={{ 
           pointerEvents: 'auto',
           userSelect: 'none',
-          ...(position === Position.Top || position === Position.Bottom 
-            ? { left: '50%', top: position === Position.Top ? '0' : 'auto', bottom: position === Position.Bottom ? '0' : 'auto', transform: 'translateX(-50%)', width: '60px', height: '100%' }
-            : { top: '50%', left: position === Position.Left ? '0' : 'auto', right: position === Position.Right ? '0' : 'auto', transform: 'translateY(-50%)', width: '100%', height: '60px' }
+          ...(position === Position.Top 
+            ? { left: '50%', top: '0', transform: 'translateX(-50%)', width: '40px', height: '20px' }
+            : position === Position.Bottom
+            ? { left: '50%', bottom: '0', transform: 'translateX(-50%)', width: '40px', height: '20px' }
+            : position === Position.Left
+            ? { top: '50%', left: '0', transform: 'translateY(-50%)', width: '20px', height: '40px' }
+            : { top: '50%', right: '0', transform: 'translateY(-50%)', width: '20px', height: '40px' }
           )
         }}
       />
