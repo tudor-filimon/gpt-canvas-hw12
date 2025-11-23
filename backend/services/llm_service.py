@@ -1,6 +1,7 @@
 from typing import Optional
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 from schema.schemas import LLMServiceRequest, LLMServiceResponse, LLMNodeContext
 from database import supabase
 from datetime import datetime
@@ -18,7 +19,7 @@ class LLMService:
         self.client = genai.Client(api_key=api_key)  # Pass API key here
         self.default_model = "gemini-2.5-flash-lite"
         self.default_temperature = 0.5
-        self.default_max_tokens = 1024
+        self.default_max_tokens = 250
         # ADD THIS: Formatting presets
         self.formatting_styles = {
             "plain": """Respond in plain text only. No markdown, headers, bold, italic, or lists. 
@@ -114,10 +115,19 @@ Key Point: [one important takeaway]""",
             # Build prompt with context
             full_prompt = self._build_prompt(request, node_context)
             
+            # NEW: Add configuration for concise responses
+            config = types.GenerateContentConfig(
+                system_instruction="You are a helpful assistant. Be concise and direct. Keep responses brief (2-3 sentences) unless more detail is explicitly requested.",
+                max_output_tokens=250,  # Reasonable limit for concise answers
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=0  # Turn off thinking for simple tasks = faster responses
+                )
+            )
             
             response = self.client.models.generate_content(
                 model=self.default_model,
                 contents=full_prompt,
+                config=config
             )
             
             # Extract metadata if available
