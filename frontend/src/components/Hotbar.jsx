@@ -9,6 +9,7 @@ import {
   Undo2,
   Redo2,
   AlertTriangle,
+  Grid3x3,
 } from "lucide-react";
 
 export default function Hotbar({
@@ -21,6 +22,7 @@ export default function Hotbar({
   onRedo,
   canUndo,
   canRedo,
+  onSnapToGrid,
   colorMode,
 }) {
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
@@ -86,6 +88,14 @@ export default function Hotbar({
         title="Fit View"
       >
         <Maximize size={20} />
+      </button>
+
+      <button
+        onClick={onSnapToGrid}
+        className="p-2 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-full transition-colors"
+        title="Snap to Grid & Auto Layout"
+      >
+        <Grid3x3 size={20} />
       </button>
 
       <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-700 mx-1"></div>

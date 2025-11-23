@@ -1206,6 +1206,84 @@ function Flow() {
     setEdges([]);
   }, [setCenter, handleAddConnectedNode]);
 
+  const onSnapToGrid = useCallback(() => {
+    setNodes((currentNodes) => {
+      if (currentNodes.length === 0) return currentNodes;
+
+      const GRID_SIZE = 50; // Grid spacing in pixels
+      const NODE_WIDTH = 400;
+      const NODE_HEIGHT = 200;
+      const HORIZONTAL_SPACING = NODE_WIDTH + 100; // Space between nodes horizontally
+      const VERTICAL_SPACING = NODE_HEIGHT + 100; // Space between nodes vertically
+
+      // Find the minimum x and y positions to start the grid from
+      const minX = Math.min(...currentNodes.map((n) => n.position.x));
+      const minY = Math.min(...currentNodes.map((n) => n.position.y));
+
+      // Snap the starting position to grid
+      const startX = Math.floor(minX / GRID_SIZE) * GRID_SIZE;
+      const startY = Math.floor(minY / GRID_SIZE) * GRID_SIZE;
+
+      // Calculate grid layout: arrange nodes in a grid pattern
+      const nodesPerRow = Math.ceil(Math.sqrt(currentNodes.length));
+      
+      const updatedNodes = currentNodes.map((node, index) => {
+        const row = Math.floor(index / nodesPerRow);
+        const col = index % nodesPerRow;
+        
+        // Calculate grid-aligned position
+        const gridX = startX + col * HORIZONTAL_SPACING;
+        const gridY = startY + row * VERTICAL_SPACING;
+        
+        // Snap to grid
+        const snappedX = Math.round(gridX / GRID_SIZE) * GRID_SIZE;
+        const snappedY = Math.round(gridY / GRID_SIZE) * GRID_SIZE;
+
+        const newPosition = { x: snappedX, y: snappedY };
+
+        // Broadcast position change via WebSocket
+        if (isConnected && sendMessage) {
+          sendMessage({
+            type: "node_moved",
+            node_id: node.id,
+            x: snappedX,
+            y: snappedY,
+          });
+        }
+
+        // Update backend position (debounced)
+        if (boardId) {
+          // Clear existing timer for this node
+          if (positionUpdateTimers.current[node.id]) {
+            clearTimeout(positionUpdateTimers.current[node.id]);
+          }
+
+          // Debounce: wait 500ms before sending update
+          positionUpdateTimers.current[node.id] = setTimeout(async () => {
+            try {
+              await nodeAPI.updateNodePosition(boardId, node.id, newPosition);
+              console.log(`Position updated in database for node ${node.id}`);
+            } catch (error) {
+              console.error(
+                `Failed to update position for node ${node.id}:`,
+                error
+              );
+            } finally {
+              delete positionUpdateTimers.current[node.id];
+            }
+          }, 500);
+        }
+
+        return {
+          ...node,
+          position: newPosition,
+        };
+      });
+
+      return updatedNodes;
+    });
+  }, [boardId, isConnected, sendMessage]);
+
   const onSearch = useCallback(() => {
     setIsSearchOpen(true);
   }, []);
@@ -1304,6 +1382,7 @@ function Flow() {
             onFitView={() => fitView({ duration: 400 })}
             onSearch={onSearch}
             onToggleTheme={toggleColorMode}
+            onSnapToGrid={onSnapToGrid}
             colorMode={colorMode}
           />
           <ReactFlow
