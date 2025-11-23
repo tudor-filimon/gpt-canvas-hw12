@@ -33,7 +33,11 @@ function Flow() {
   const { fitView, getNode, getViewport, setCenter, screenToFlowPosition, flowToScreenPosition } =
     useReactFlow();
   const [edges, setEdges] = useState([]);
-  const [colorMode, setColorMode] = useState("dark");
+  // Load color mode from localStorage, default to "dark" if not found
+  const [colorMode, setColorMode] = useState(() => {
+    const savedColorMode = localStorage.getItem("colorMode");
+    return savedColorMode || "dark";
+  });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // ********** NEW CODE HERE **********
@@ -802,10 +806,10 @@ function Flow() {
     }
   }, [colorMode]);
 
-  // Apply dark mode on initial mount
+  // Save color mode to localStorage whenever it changes
   useEffect(() => {
-    document.documentElement.classList.add("dark");
-  }, []);
+    localStorage.setItem("colorMode", colorMode);
+  }, [colorMode]);
 
   // ********** NEW CODE HERE **********
   // Load board data on initial mount
