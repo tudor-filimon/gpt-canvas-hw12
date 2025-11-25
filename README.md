@@ -1,6 +1,6 @@
 # weaver
 Hack Western 12 Project - weaver
-[Devpost!!]([url](https://devpost.com/software/weaver-r5qpk0))
+[Devpost!!](https://devpost.com/software/weaver-r5qpk0)
 
 ### Youtube Demo Link
 [Youtube Demo](https://www.youtube.com/watch?v=sFeuHYn1jLY)
